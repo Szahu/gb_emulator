@@ -28,16 +28,5 @@
             "console": "integratedTerminal",
             "preLaunchTask": "build_release"
         },
-        {
-            "name": "Launch test linux",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/gbit/gbit",
-            "args": [],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/gbit/",
-            "environment": [],
-            "preLaunchTask": "build_gbit"
-        }
     ]
 }
