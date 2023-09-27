@@ -1,4 +1,5 @@
 #include "cpu.hpp"
+#include <cstring>
 #include <iostream>
 
 #define FLAG_H getBitFrom(m_regs[REG_F], FLAG_H_BIT)
@@ -15,7 +16,7 @@
 #endif
 
 Cpu::Cpu(Memory* memory_ref, size_t clock_speed): m_memory{memory_ref}, m_clock_speed{clock_speed} {
-    memset(m_regs, 0x00, 8);
+    std::memset(m_regs, 0x00, 8);
     PC = ROM_LOCATION;
     m_cycle_duration_micros = static_cast<unsigned int>((1.0f / static_cast<float>(clock_speed)) * 1000000.0f);
 }
@@ -280,7 +281,6 @@ void Cpu::decodeAndExecute(uint8_t opcode, bool& stop_signal, unsigned int& m_cy
         {
             uint8_t lsb = m_memory->ReadByte(PC++);
             uint8_t msb = m_memory->ReadByte(PC++);
-            uint16_t val = lsb | (msb << 8);
             m_regs[(opcode >> 4) * 2] = lsb;
             m_regs[(opcode >> 4) * 2 + 1] = msb;
             m_cycles_count = 3;
@@ -736,6 +736,7 @@ void Cpu::decodeAndExecute(uint8_t opcode, bool& stop_signal, unsigned int& m_cy
         {
             m_cycles_count = 0;
             stop_signal = true;
+            break;
         }
         //TODO HALT STOP DI EI
         default:
