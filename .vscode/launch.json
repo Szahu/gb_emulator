@@ -27,6 +27,6 @@
             "environment": [],
             "console": "integratedTerminal",
             "preLaunchTask": "build_release"
-        }
+        },
     ]
 }
