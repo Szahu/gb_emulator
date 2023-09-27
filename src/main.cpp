@@ -16,8 +16,8 @@ void load_program_from_file(const std::string &filename, char *mem, const unsign
 
 int main(int argc, char** argv) {
 
-    std::unique_ptr<Memory> mem(new Memory(0xFFFF));
-    Cpu cpu(mem.get(), 1000);
+    Memory mem(0xFFFF);
+    Cpu cpu(&mem, 1000);
     
     load_program_from_file(PROJECT_DIR"/test/cpu_instrs/individual/06-ld r,r.gb", (char*)cpu.GetMemory()->GetBufferLocation(), 0);
 

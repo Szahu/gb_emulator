@@ -33,7 +33,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/gbit/gbit",
-            "args": ["--no-enable-cb"],
+            "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/gbit/",
             "environment": [],
