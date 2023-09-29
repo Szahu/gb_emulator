@@ -5,6 +5,7 @@
 #include <thread>
 #include <cstring>
 #include <cstdio>
+#include "common.hpp"
 
 #define SLEEP_MINIS(ms) std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 #define SLEEP_MICROS(ms) std::this_thread::sleep_for(std::chrono::microseconds(ms));
@@ -43,27 +44,19 @@ public:
 
     Cpu(Memory* memory_ref, size_t clock_speed);
 
-    void CpuStep(bool& stop_signal, unsigned int& cycles);
+    void CpuStep(std::atomic<bool>& stop_signal, unsigned int& cycle_count);
 
     inline Memory* GetMemory() const {return m_memory;}
 
 private:
 
-    void decodeAndExecuteNonCB(uint8_t opcode, bool& stop_signal, unsigned int& m_cycles_count);
+    void decodeAndExecuteNonCB(uint8_t opcode, std::atomic<bool>& stop_signal, unsigned int& m_cycles_count);
     void decodeAndExecuteCB(uint8_t opcode, unsigned int& m_cycles_count);
 
     uint8_t add(uint8_t a, uint8_t b, bool add_carry, bool* half_carry, bool* full_carry);
     uint16_t add_16(uint16_t a, uint16_t b, bool* half_carry, bool* full_carry);
 
     uint8_t sub(uint8_t a, uint8_t b, bool use_carry, bool* half_carry, bool* full_carry);
-
-    inline void bitSet(uint8_t& number, uint8_t n, bool x) {
-        number = (number & ~((uint8_t)1 << n)) | ((uint8_t)x << n);
-    }
-
-    inline bool bitGet(uint8_t val, uint8_t k) {
-        return (val & ( 1 << k )) >> k;
-    }
 
     void add_A_reg(uint8_t operand, bool with_carry);
 
@@ -77,7 +70,6 @@ private:
 
     Memory* m_memory = nullptr;
     size_t m_clock_speed = 0;
-    unsigned int m_cycle_duration_micros = 0;
 
     // registers B C D E H L F A
     uint8_t m_regs[8];
@@ -85,6 +77,9 @@ private:
     uint16_t PC = 0; // program counter
     const size_t ROM_LOCATION = 0x0100;
 
+    static constexpr uint16_t IE_ENABLE_ADDR = 0xFFFF;
+    static constexpr uint16_t IE_FLAG_ADDR = 0xFF0F;
+
     bool m_halted = false;
-    bool ime = false;
+    bool m_ime = false;
 };

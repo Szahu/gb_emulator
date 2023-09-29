@@ -15,8 +15,7 @@
 
 Cpu::Cpu(Memory* memory_ref, size_t clock_speed): m_memory{memory_ref}, m_clock_speed{clock_speed} {
     std::memset(m_regs, 0x00, 8);
-    PC = ROM_LOCATION;
-    m_cycle_duration_micros = static_cast<unsigned int>((1.0f / static_cast<float>(clock_speed)) * 1000000.0f);
+    PC = 0;
 }
 
 bool Cpu::checkFlagsConditions(uint8_t condition) {
@@ -91,38 +90,24 @@ void Cpu::setFlags(bool h, bool c, bool z, bool n) {
     bitSet(m_regs[REG_F], FLAG_N_BIT, n);
 }
 
-void Cpu::CpuStep(bool& stop_signal, unsigned int& cycles) {
-
+void Cpu::CpuStep(std::atomic<bool>& stop_signal, unsigned int& cycle_count) {
     // fetch next opcode
     uint8_t instruction = m_memory->ReadByte(PC);
+    cycle_count += 1; // to account for fetching and decoding
+
     LOG_CPU_VERBOSE(printf("opcode: %02x PC: %024x\n", instruction, PC);)
     PC += 1;
 
-    unsigned int cycle_count = 0;
-
-    auto start = std::chrono::high_resolution_clock::now();    
-
     if (instruction == 0xCB) {
-        decodeAndExecuteCB(m_memory->ReadByte(PC++), cycle_count);
+        instruction = m_memory->ReadByte(PC++);
+        cycle_count += 1; // to account for fetching and decoding
+        decodeAndExecuteCB(instruction, cycle_count);
     } else {
         decodeAndExecuteNonCB(instruction, stop_signal, cycle_count);
     }
-
-    auto stop = std::chrono::high_resolution_clock::now();
-    unsigned int duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count();
-
-    unsigned int expected_furation = cycle_count * m_cycle_duration_micros;
-
-    if (duration < expected_furation) {
-        SLEEP_MICROS(m_cycle_duration_micros - duration);
-    } else {
-        printf("Cycle too long! Took %u isntead of %u\n", duration, expected_furation);
-    }
-
-    cycles = cycle_count;
 }
 
-void Cpu::decodeAndExecuteNonCB(uint8_t opcode, bool& stop_signal, unsigned int& m_cycles_count) {
+void Cpu::decodeAndExecuteNonCB(uint8_t opcode, std::atomic<bool>& stop_signal, unsigned int& m_cycles_count) {
 
     switch (opcode) {
 
@@ -868,7 +853,7 @@ void Cpu::decodeAndExecuteNonCB(uint8_t opcode, bool& stop_signal, unsigned int&
             uint8_t msb = m_memory->ReadByte(SP++);
             uint16_t addr = (msb << 8) | lsb;
             PC = addr;
-            ime = true;
+            m_ime = true;
             m_cycles_count = 4;
             break;
         }
@@ -902,14 +887,14 @@ void Cpu::decodeAndExecuteNonCB(uint8_t opcode, bool& stop_signal, unsigned int&
         // DI | 1 M-cycle
         case 0xF3:
         {
-            ime = false;
+            m_ime = false;
             m_cycles_count = 1;
             break;
         }
         // EI | 1 M-cycle
         case 0xFB:
         {
-            ime = true;
+            m_ime = true;
             m_cycles_count = 1;
             break;
         }
