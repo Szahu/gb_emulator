@@ -10,17 +10,9 @@
 #include <atomic>
 #include <vector>
 
-void load_program_from_file(const std::string &filename, std::vector<uint8_t>& data) {
-    std::ifstream file(filename, std::ios::binary | std::ios::ate);
-    std::streamsize size = file.tellg();
-    file.seekg(0, std::ios::beg);
-    data.reserve(size);
-    if (!file.read(reinterpret_cast<char *>(data.data()), size)) {
-        throw std::runtime_error("Failed to load the program");
-    }
-}
-
+void load_program_from_file(const std::string &filename, std::vector<uint8_t>& data);
 void setupPostBootData(Memory& mem);
+void updateKeymap(Memory& mem, bool* buttons);
 
 int main(int argc, char** argv) {
 
@@ -28,7 +20,6 @@ int main(int argc, char** argv) {
 
     const unsigned int frequency = 1048576;
     const unsigned int mem_size = 0xFFFF + 1;
-    const unsigned int sync_interval_nanos = 1000000;
 
     uint8_t* framebuffer = new uint8_t[160 * 144 * 3];
 
@@ -37,12 +28,14 @@ int main(int argc, char** argv) {
     Ppu ppu(&mem, framebuffer);
     Timer timer(&mem);
 
+    // right left up down a b select start
+    bool button_map[] = {false, false, false, false, false, false, false, false};
+
     std::atomic<bool> stop_signal = false;
 
-    const long m_cycle_duration_nanos = static_cast<unsigned int>((1.0f / static_cast<float>(frequency)) * 1000000000.0f);
-    
-    // const std::string game_rom_path = PROJECT_DIR"/roms/tetris.gb";
-    const std::string game_rom_path = PROJECT_DIR"/roms/cpu_instrs/cpu_instrs.gb";
+    const long long frame_duration_micros = static_cast<long>(1000000.0f / 60.0f);
+
+    const std::string game_rom_path = PROJECT_DIR"/roms/tetris.gb";
 
     std::vector<uint8_t> rom_buffer;
     load_program_from_file(game_rom_path, rom_buffer);
@@ -50,23 +43,24 @@ int main(int argc, char** argv) {
 
     rom_buffer = std::vector<uint8_t>();
 
-
     std::cout << "Running rom: " << game_rom_path << std::endl;
 
-    auto start = std::chrono::high_resolution_clock::now();    
     bool boot_done = false;
 
     setupPostBootData(mem);
     cpu.PostBoodSetup();
 
     std::thread gui_thread([&] () {
-        Gui gui(160, 144, framebuffer);
+        Gui gui(160, 144, framebuffer, button_map);
         while (!stop_signal) gui.RenderFrame(stop_signal);
     });
 
     unsigned int cycle_count = 0;
+    auto start = std::chrono::high_resolution_clock::now();    
 
     while (!stop_signal) {
+
+        updateKeymap(mem, button_map);
 
         unsigned int tmp = 0;
         cpu.CpuStep(stop_signal, tmp);
@@ -75,17 +69,13 @@ int main(int argc, char** argv) {
 
         cycle_count += tmp;
 
-        // auto stop = std::chrono::high_resolution_clock::now();
-        // long duration = std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count();
-        // if (duration >= sync_interval_nanos) {
-        //     long simulated_running_time_ns = cycle_count * m_cycle_duration_nanos;
-        //     SLEEP_NANOS(simulated_running_time_ns - duration);
-        //     if (duration > frequency * m_cycle_duration_nanos) {
-        //         printf("%u cycles took too long: %u\n", cycle_count, duration);
-        //     }
-        //     start = std::chrono::high_resolution_clock::now(); 
-        //     cycle_count = 0;
-        // }
+        auto stop = std::chrono::high_resolution_clock::now();
+        const long long duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count();
+        if (cycle_count >= static_cast<unsigned int>(frequency/60)) {
+            SLEEP_MICROS(frame_duration_micros - duration > 0 ? frame_duration_micros - duration : 0);
+            start = std::chrono::high_resolution_clock::now(); 
+            cycle_count = 0;
+        }
     }
 
     gui_thread.join();
@@ -94,6 +84,46 @@ int main(int argc, char** argv) {
     std::cout << "Terminating the emulator" << std::endl;
 
     return 0;
+}
+
+void updateKeymap(Memory& mem, bool* buttons) {
+    uint8_t current_val = mem.ReadByte(0xFF00);
+    bool direction = bitGet(current_val, 4);
+    bool action = bitGet(current_val, 5);
+    bool trigger_interrupt = false;
+    for (uint8_t i = 0;i < 4; ++i) {
+        if (!direction && !action) {
+            bitSet(current_val, i, !(buttons[i] && buttons[2 * i]));
+            trigger_interrupt = true;
+        } else if (!direction) {
+            bitSet(current_val, i, !(buttons[i]));
+            trigger_interrupt = true;
+        } else if (!action) {
+            bitSet(current_val, i, !(buttons[2 * i]));
+            trigger_interrupt = true;
+        } else {
+            bitSet(current_val, i, 1);
+        }
+    }
+
+    if (trigger_interrupt) {
+        uint8_t requests = mem.ReadByte(0xFF0F);
+        bitSet(requests, 4, 1);
+        mem.WriteByte(0xFF0F, requests);
+    }
+
+    mem.WriteByte(0xFF00, current_val);
+}
+
+void load_program_from_file(const std::string &filename, std::vector<uint8_t>& data) {
+    std::ifstream file(filename, std::ios::binary | std::ios::ate);
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+    if (size == -1) throw std::runtime_error("Failed to load the program");
+    data.reserve(size);
+    if (!file.read(reinterpret_cast<char *>(data.data()), size)) {
+        throw std::runtime_error("Failed to load the program");
+    }
 }
 
 void setupPostBootData(Memory& mem) {

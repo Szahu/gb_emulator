@@ -1,7 +1,9 @@
 #include "gui.hpp"
+#include <unordered_map>
 
-Gui::Gui(uint8_t screen_width, uint8_t screen_height, uint8_t* frame_buffer_ref) {
+Gui::Gui(uint8_t screen_width, uint8_t screen_height, uint8_t* frame_buffer_ref, bool* button_map) {
 
+    m_button_map = button_map;
     m_framebuffer = frame_buffer_ref;
 
     gb_screen_width = screen_width;
@@ -19,10 +21,36 @@ Gui::Gui(uint8_t screen_width, uint8_t screen_height, uint8_t* frame_buffer_ref)
 }
 
 void Gui::RenderFrame(std::atomic<bool>& stop_signal) {
+    
+    std::unordered_map<SDL_Keycode, uint8_t> key_map = {
+        {SDLK_RIGHT, 0},
+        {SDLK_LEFT, 1},
+        {SDLK_UP, 2},
+        {SDLK_DOWN, 3},
+        {SDLK_a, 4},
+        {SDLK_s, 5},
+        {SDLK_d, 6},
+        {SDLK_f, 7},
+    };
+    
     // Render SDL stuff
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         stop_signal = event.type == SDL_EVENT_QUIT;
+        if (event.type == SDL_EVENT_KEY_DOWN) {
+            const SDL_Keycode code = event.key.keysym.sym;
+            auto itr = key_map.find(code);
+            if(itr != key_map.end()) {
+                m_button_map[itr->second] = true;
+            }
+
+        } else if (event.type == SDL_EVENT_KEY_UP) {
+            const SDL_Keycode code = event.key.keysym.sym;
+            auto itr = key_map.find(code);
+            if(itr != key_map.end()) {
+                m_button_map[itr->second] = false;
+            }
+        }
     }
     SDL_SetRenderDrawColor(m_renderer, 255, 0, 0, 255);
     SDL_RenderClear(m_renderer);

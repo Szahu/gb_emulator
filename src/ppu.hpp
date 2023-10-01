@@ -36,6 +36,8 @@ private:
     void oamScan(OAM_t* oam_buffer, uint8_t oam_buffer_index);
     void renderBackgroundLine(uint8_t scanline);
 
+    void requestStatInterrupt();
+
     void hBlankStep(uint8_t& current_scanline);
     void vBlankStep(uint8_t& current_scanline);
     void oamScanStep(uint8_t& current_scanline);

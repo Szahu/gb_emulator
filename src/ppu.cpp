@@ -42,21 +42,21 @@ void Ppu::renderBackgroundLine(uint8_t scanline) {
     uint8_t scy = m_memory->ReadByte(SCY_ADDR);
 
     uint8_t pixel_coord_y = (scanline + scy) & 0xFF;
-    uint8_t y_tile = pixel_coord_y / 8;
+    uint16_t y_tile = pixel_coord_y / 8;
 
     for (uint8_t x_offset = 0; x_offset < SCREEN_WIDTH; ++x_offset) {
         
-        uint8_t pixel_coord_x = (x_offset + scx) & 0xFF;
-        uint8_t x_tile = pixel_coord_x / 8;
+        uint8_t pixel_coord_x = (x_offset + (scx / 8)) & 0xFF;
+        uint16_t x_tile = pixel_coord_x / 8;
 
-        uint8_t tile_idnex = m_memory->ReadByte(tilemap_addr + (32 * y_tile + x_tile));
+        uint8_t tile_idnex = m_memory->ReadByte(tilemap_addr + x_tile + (y_tile << 5));
 
         uint16_t tile_addr = 0;
 
         if (tile_data_unsigned_addressing) {
             tile_addr = 0x8000 + 16 * tile_idnex;
         } else {
-            tile_addr = 0x8800 + 16 * (int8_t)tile_idnex;
+            tile_addr = 0x9000 + 16 * (int8_t)tile_idnex;
         }
 
         uint8_t local_pixel_x = 7 - (pixel_coord_x % 8);
@@ -68,11 +68,14 @@ void Ppu::renderBackgroundLine(uint8_t scanline) {
         uint8_t pixel_val = (static_cast<uint8_t>(bitGet(first_tile_byte, local_pixel_x))) | 
                             (static_cast<uint8_t>(bitGet(second_tile_byte, local_pixel_x)) << 1);
 
-        const uint8_t palette[] = {0xFF, 0x00, 0x00, 0x00};
+        const uint8_t palette[] = {0xe0, 0xf8, 0xd0, 
+                                   0x88, 0xc0, 0x70,
+                                   0x34, 0x68, 0x56,
+                                   0x08, 0x18, 0x20};
 
-        m_framebuffer[scanline * SCREEN_WIDTH * 3 + x_offset * 3] = palette[pixel_val];
-        m_framebuffer[scanline * SCREEN_WIDTH * 3 + x_offset * 3 + 1] = palette[pixel_val];
-        m_framebuffer[scanline * SCREEN_WIDTH * 3 + x_offset * 3 + 2] = palette[pixel_val];
+        m_framebuffer[scanline * SCREEN_WIDTH * 3 + x_offset * 3] = palette[pixel_val * 3];
+        m_framebuffer[scanline * SCREEN_WIDTH * 3 + x_offset * 3 + 1] = palette[pixel_val * 3 + 1];
+        m_framebuffer[scanline * SCREEN_WIDTH * 3 + x_offset * 3 + 2] = palette[pixel_val * 3 + 2];
 
     }   
 }
@@ -86,10 +89,27 @@ void Ppu::writeByteWrap(uint16_t addr, uint8_t byte) {
 
 }
 
+void Ppu::requestStatInterrupt() {
+    uint8_t requests = m_memory->ReadByte(0xFF0F);
+    bitSet(requests, 1, 1);
+    m_memory->WriteByte(0xFF0F, requests);
+}
 
 void Ppu::PpuStep(unsigned int last_m_cycle_count) {
 
     if (!bitGet(m_memory->ReadByte(LCDC_ADDR), 7)) return;
+
+    uint8_t stat = m_memory->ReadByte(STAT_ADDR);
+    uint8_t lyc = m_memory->ReadByte(LYC_ADDR);
+    bitSet(stat, 0, bitGet(m_current_mode, 0));
+    bitSet(stat, 1, bitGet(m_current_mode, 1));
+    if (m_memory->ReadByte(LY_ADDR) == lyc) {
+        bitSet(stat, 2, 1);
+        if (bitGet(stat, 6)) {
+            requestStatInterrupt();
+        }
+    }
+    m_memory->WriteByte(STAT_ADDR, stat);
 
     m_dot_pool += 4 * last_m_cycle_count;
     static uint8_t current_scanline = 0;
@@ -118,6 +138,12 @@ void Ppu::hBlankStep(uint8_t& current_scanline) {
     static unsigned int checkpoint = 0;
 
     switch (checkpoint) {
+        case 1:
+            if (bitGet(m_memory->ReadByte(STAT_ADDR), 0)) {
+                requestStatInterrupt();
+            }
+            checkpoint++;
+            break;
         case 0:
 
             if (m_dot_pool < 87) {
@@ -149,6 +175,10 @@ void Ppu::vBlankStep(uint8_t& current_scanline) {
             uint8_t requests = m_memory->ReadByte(0xFF0F);
             bitSet(requests, 0, 1);
             m_memory->WriteByte(0xFF0F, requests);
+
+            if (bitGet(m_memory->ReadByte(STAT_ADDR), 4)) {
+                requestStatInterrupt();
+            }
             checkpoint++;
             break;
         }
@@ -188,8 +218,14 @@ void Ppu::oamScanStep(uint8_t& current_scanline) {
     static unsigned int checkpoint = 0;
 
     switch (checkpoint) {
-        case 0:
-
+        case 0: {
+            if (bitGet(m_memory->ReadByte(STAT_ADDR), 5)) {
+                requestStatInterrupt();
+            }
+            checkpoint++;
+            break;
+        }
+        case 1:
             if (m_dot_pool < 80) {
                 m_current_dots_need = 80;
                 return;
@@ -219,13 +255,6 @@ void Ppu::drawingStep(uint8_t& current_scanline) {
             m_memory->WriteByte(LY_ADDR, current_scanline);
             
             renderBackgroundLine(current_scanline);
-
-            // for (uint8_t i = 0;i < SCREEN_WIDTH; ++i) {
-            //     const unsigned int current_frame_buffer_index = current_scanline * SCREEN_WIDTH * 3 + i * 3;
-            //     m_framebuffer[current_frame_buffer_index] = current_scanline * (0xFF / SCREEN_HEIGHT);
-            //     m_framebuffer[current_frame_buffer_index + 1] = i * (0xFF / SCREEN_WIDTH);
-            //     m_framebuffer[current_frame_buffer_index + 2] = i * (0xFF / SCREEN_WIDTH);
-            // }
 
             m_current_mode = mode_t::H_Blank;
 

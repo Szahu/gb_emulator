@@ -4,7 +4,7 @@
 
 class Gui {
 public:
-    Gui(uint8_t screen_with, uint8_t screen_height, uint8_t* frame_buffer_ref);
+    Gui(uint8_t screen_with, uint8_t screen_height, uint8_t* frame_buffer_ref, bool* button_map);
     ~Gui();
 
     void RenderFrame(std::atomic<bool>& stop_signal);
@@ -23,4 +23,5 @@ private:
     SDL_Texture *m_texture;
 
     uint8_t* m_framebuffer;
+    bool* m_button_map;
 };

@@ -30,7 +30,7 @@ uint8_t Memory::ReadByte(uint16_t addr) const {
     LOG_MEM_VERBOSE(printf("MEM: ReadByte | addr: %02x | byte: %01x\n", addr, m_memory[addr]));
     
     if (addr >= 0x4000 && addr <= 0x7FFF) {
-        return m_rom_banks[m_current_bank][address % 0x4000];
+        return m_rom_banks[m_current_bank][addr % 0x4000];
     }
 
     return m_memory[addr];
@@ -69,10 +69,6 @@ void Memory::WriteByte(uint16_t addr, uint8_t byte) {
         return;
     }
 
-    // TODO REMOVE
-    if (addr == 0xFF02) {
-        printf("%c", m_memory[0xFF01]);
-    }
     m_memory[addr] = byte;
 }
 
@@ -82,7 +78,7 @@ void Memory::LoadRom(uint8_t* buffer, size_t size) {
     size_t rom_size = (32768) * (1 << buffer[0x0148]);
     uint8_t number_of_banks = (2 << buffer[0x0148]);
 
-    if (rom_type != 0x01) {
+    if (rom_type > 0x01) {
         printf("UNSUPPORTED MBC TYPE: %02x\n", rom_type);
     }
 
