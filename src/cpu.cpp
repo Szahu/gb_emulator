@@ -5,7 +5,7 @@
 // #define LOG_CPU_LEVEL_VERBOSE
 
 #ifdef LOG_CPU_LEVEL_VERBOSE
-#define LOG_CPU_VERBOSE(x) x
+#define LOG_CPU_VERBOSE(x) if (m_log_verbose) x
 #else 
 #define LOG_CPU_VERBOSE(x)
 #endif
@@ -15,7 +15,7 @@
 
 Cpu::Cpu(Memory* memory_ref, size_t clock_speed): m_memory{memory_ref}, m_clock_speed{clock_speed} {
     std::memset(m_regs, 0x00, 8);
-    PC = 0;
+    PC = ROM_LOCATION;
 }
 
 bool Cpu::checkFlagsConditions(uint8_t condition) {
@@ -90,21 +90,57 @@ void Cpu::setFlags(bool h, bool c, bool z, bool n) {
     bitSet(m_regs[REG_F], FLAG_N_BIT, n);
 }
 
-void Cpu::CpuStep(std::atomic<bool>& stop_signal, unsigned int& cycle_count) {
-    // fetch next opcode
-    uint8_t instruction = m_memory->ReadByte(PC);
-    cycle_count += 1; // to account for fetching and decoding
+void Cpu::handleInterrupts(unsigned int& cycle_count) {
+    uint8_t interrupts_requests = m_memory->ReadByte(IE_FLAG_ADDR);
+    uint8_t interrupts_enables = m_memory->ReadByte(IE_ENABLE_ADDR);
 
-    LOG_CPU_VERBOSE(printf("opcode: %02x PC: %024x\n", instruction, PC);)
-    PC += 1;
+    uint16_t handlers[] = {0x40, 0x48, 0x50, 0x58, 0x60};
 
-    if (instruction == 0xCB) {
-        instruction = m_memory->ReadByte(PC++);
-        cycle_count += 1; // to account for fetching and decoding
-        decodeAndExecuteCB(instruction, cycle_count);
-    } else {
-        decodeAndExecuteNonCB(instruction, stop_signal, cycle_count);
+    for (uint8_t i = 0;i < 5; ++i) {
+        if (bitGet(interrupts_requests, i) && bitGet(interrupts_enables, i)) {
+            m_halted = false;
+
+            if (m_ime) {
+                m_ime = false;
+                bitSet(interrupts_requests, i, 0);
+                m_memory->WriteByte(IE_FLAG_ADDR, interrupts_requests);
+                SP--;
+                m_memory->WriteByte(SP--, MSB(PC));
+                m_memory->WriteByte(SP, LSB(PC));
+                PC = handlers[i];
+                cycle_count += 5;
+            }
+            
+            break;
+        }
     }
+
+}
+
+void Cpu::CpuStep(std::atomic<bool>& stop_signal, unsigned int& cycle_count) {
+    
+    if (m_enable_ime_next_cycle) { 
+        m_ime = true;
+        m_enable_ime_next_cycle = false;
+    }
+
+    if (!m_halted) {
+        uint8_t instruction = m_memory->ReadByte(PC);
+
+        LOG_CPU_VERBOSE(printf("opcode: %02x PC: %04x\n", instruction, PC);)
+        PC += 1;
+
+        if (instruction == 0xCB) {
+            instruction = m_memory->ReadByte(PC++);
+            decodeAndExecuteCB(instruction, cycle_count);
+        } else {
+            decodeAndExecuteNonCB(instruction, stop_signal, cycle_count);
+        }
+    } else {
+        cycle_count += 1;
+    }
+
+    handleInterrupts(cycle_count);
 }
 
 void Cpu::decodeAndExecuteNonCB(uint8_t opcode, std::atomic<bool>& stop_signal, unsigned int& m_cycles_count) {
@@ -773,7 +809,7 @@ void Cpu::decodeAndExecuteNonCB(uint8_t opcode, std::atomic<bool>& stop_signal, 
             int8_t offset = m_memory->ReadByte(PC++);
             uint8_t cond = (opcode & 0b00011000) >> 3;
             bool res = checkFlagsConditions(cond);
-
+            
             if (res) {
                 PC += offset;
                 m_cycles_count = 3;
@@ -813,8 +849,8 @@ void Cpu::decodeAndExecuteNonCB(uint8_t opcode, std::atomic<bool>& stop_signal, 
             bool res = checkFlagsConditions((opcode & 0b00011000) >> 3);
             if (res) {
                 SP--;
-                m_memory->WriteByte(SP--, (PC & 0xF0) >> 8);
-                m_memory->WriteByte(SP, (PC & 0x0F));
+                m_memory->WriteByte(SP--, MSB(PC));
+                m_memory->WriteByte(SP, LSB(PC));
                 PC = addr;
                 m_cycles_count = 6;
             } else {
@@ -894,7 +930,7 @@ void Cpu::decodeAndExecuteNonCB(uint8_t opcode, std::atomic<bool>& stop_signal, 
         // EI | 1 M-cycle
         case 0xFB:
         {
-            m_ime = true;
+            m_enable_ime_next_cycle = true;
             m_cycles_count = 1;
             break;
         }

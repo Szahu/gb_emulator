@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <stddef.h>
+#include <vector>
 
 /*
 Memory map:
@@ -26,14 +27,18 @@ public:
     inline uint8_t* GetBufferLocation() const { return m_memory; }
 
     void ReadByte(uint16_t addr, void* dest) const;
-
     uint8_t ReadByte(uint16_t addr) const;
-
     void WriteByte(uint16_t addr, uint8_t byte);
+
+    void LoadRom(uint8_t* buffer, size_t size);
 
     void CleanMemory();
 
 private:
     uint8_t* m_memory = nullptr;
     size_t m_memory_size = 0;
+    std::vector<uint8_t*> m_rom_banks;
+    uint8_t m_current_bank = 0;
+    bool m_ram_enable = false;
+    bool m_advanced_banking_mode = false;
 };

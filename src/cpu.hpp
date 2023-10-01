@@ -48,6 +48,23 @@ public:
 
     inline Memory* GetMemory() const {return m_memory;}
 
+    inline void SetLogVerbose(bool val) {m_log_verbose = val;}
+
+    inline void PostBoodSetup() {
+        m_regs[REG_A] = 0x01;
+        m_regs[REG_F] = 0b10110000;
+        m_regs[REG_B] = 0x00;
+        m_regs[REG_C] = 0x13;
+        m_regs[REG_D] = 0x00;
+        m_regs[REG_E] = 0xD8;
+        m_regs[REG_H] = 0x01;
+        m_regs[REG_L] = 0x4D;
+        SP = 0xFFFE;
+
+        m_halted = false;
+        m_ime = true;
+    }
+
 private:
 
     void decodeAndExecuteNonCB(uint8_t opcode, std::atomic<bool>& stop_signal, unsigned int& m_cycles_count);
@@ -66,6 +83,8 @@ private:
 
     bool checkFlagsConditions(uint8_t condition);
 
+    void handleInterrupts(unsigned int& cycle_count);
+
 private:
 
     Memory* m_memory = nullptr;
@@ -81,5 +100,8 @@ private:
     static constexpr uint16_t IE_FLAG_ADDR = 0xFF0F;
 
     bool m_halted = false;
+    bool m_enable_ime_next_cycle = false;
     bool m_ime = false;
+
+    bool m_log_verbose = true;
 };
