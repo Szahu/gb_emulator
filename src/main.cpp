@@ -9,6 +9,7 @@
 #include "timer.hpp"
 #include <atomic>
 #include <vector>
+#include <mutex>
 
 void load_program_from_file(const std::string &filename, std::vector<uint8_t>& data);
 void setupPostBootData(Memory& mem);
@@ -25,7 +26,7 @@ int main(int argc, char** argv) {
 
     Memory mem(mem_size);
     Cpu cpu(&mem, frequency);
-    Ppu ppu(&mem, framebuffer);
+    Ppu ppu(&mem, framebuffer, [] () {});
     Timer timer(&mem);
 
     // right left up down a b select start
@@ -35,7 +36,7 @@ int main(int argc, char** argv) {
 
     const long long frame_duration_micros = static_cast<long>(1000000.0f / 60.0f);
 
-    const std::string game_rom_path = PROJECT_DIR"/roms/tetris.gb";
+    const std::string game_rom_path = PROJECT_DIR"/roms/mario.gb";
 
     std::vector<uint8_t> rom_buffer;
     load_program_from_file(game_rom_path, rom_buffer);
@@ -45,14 +46,14 @@ int main(int argc, char** argv) {
 
     std::cout << "Running rom: " << game_rom_path << std::endl;
 
-    bool boot_done = false;
-
     setupPostBootData(mem);
     cpu.PostBoodSetup();
 
     std::thread gui_thread([&] () {
         Gui gui(160, 144, framebuffer, button_map);
-        while (!stop_signal) gui.RenderFrame(stop_signal);
+        while (!stop_signal) {
+            gui.RenderFrame(stop_signal);
+        }
     });
 
     unsigned int cycle_count = 0;
@@ -93,13 +94,13 @@ void updateKeymap(Memory& mem, bool* buttons) {
     bool trigger_interrupt = false;
     for (uint8_t i = 0;i < 4; ++i) {
         if (!direction && !action) {
-            bitSet(current_val, i, !(buttons[i] && buttons[2 * i]));
+            bitSet(current_val, i, !(buttons[i] && buttons[i + 4]));
             trigger_interrupt = true;
         } else if (!direction) {
             bitSet(current_val, i, !(buttons[i]));
             trigger_interrupt = true;
         } else if (!action) {
-            bitSet(current_val, i, !(buttons[2 * i]));
+            bitSet(current_val, i, !(buttons[i + 4]));
             trigger_interrupt = true;
         } else {
             bitSet(current_val, i, 1);

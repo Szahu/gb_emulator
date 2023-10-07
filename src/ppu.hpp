@@ -2,6 +2,7 @@
 
 #include "memory.hpp"
 #include <queue>
+#include <functional>
 
 struct PixelData_t {
     uint8_t color;
@@ -12,7 +13,7 @@ struct PixelData_t {
 struct OAM_t {
     uint8_t y_position;
     uint8_t x_position;
-    uint8_t tile_data;
+    uint8_t tile_index;
     uint8_t flags;
 };
 
@@ -25,7 +26,7 @@ enum mode_t {
 
 class Ppu {
 public:
-    Ppu(Memory* mem_ref, uint8_t* frame_buffer_ref);
+    Ppu(Memory* mem_ref, uint8_t* frame_buffer_ref, std::function<void()> frame_ready_callback);
     ~Ppu();
 
     void PpuStep(unsigned int vailable_cycles);
@@ -33,15 +34,16 @@ public:
     inline uint8_t* GetFrameBuffer() {return m_framebuffer;}
 
 private:
-    void oamScan(OAM_t* oam_buffer, uint8_t oam_buffer_index);
+    void oamScan(uint8_t scasnline, OAM_t* oam_buffer, uint8_t& oam_buffer_index, uint16_t& oam_ptr);
     void renderBackgroundLine(uint8_t scanline);
+    void renderObjectLine(uint8_t scanline, OAM_t* oam_buffer, uint8_t buffer_size);
 
     void requestStatInterrupt();
 
     void hBlankStep(uint8_t& current_scanline);
     void vBlankStep(uint8_t& current_scanline);
-    void oamScanStep(uint8_t& current_scanline);
-    void drawingStep(uint8_t& current_scanline);
+    void oamScanStep(uint8_t& current_scanline, OAM_t* oam_buffer, uint8_t& oam_buffer_size);
+    void drawingStep(uint8_t& current_scanline, OAM_t* oam_buffer, uint8_t buffer_size);
 
     uint8_t readByteWrap(uint16_t addr);
     void writeByteWrap(uint16_t addr, uint8_t byte);
@@ -65,6 +67,14 @@ private:
     static constexpr unsigned int SCREEN_WIDTH = 160;
     static constexpr unsigned int SCREEN_HEIGHT = 144;
 
+    static constexpr uint8_t PALETTE[] = {0xe0, 0xf8, 0xd0, 
+                                          0x88, 0xc0, 0x70,
+                                          0x34, 0x68, 0x56,
+                                          0x08, 0x18, 0x20};
+
+    // static constexpr uint8_t palette[] = {
+    //     0x08, 0x18, 0x20, 0x34, 0x68, 0x56, 0x88, 0xc0, 0x70, 0xe0, 0xf8, 0xd0};
+
     const unsigned int WINDOW_WIDTH = 256;    
     const unsigned int WINDOW_HEIGHT = 256;    
 
@@ -74,4 +84,6 @@ private:
     mode_t m_current_mode = mode_t::OAM_Scan;
     unsigned int m_dot_pool = 0;
     unsigned int m_current_dots_need = 0;    
+
+    std::function<void()> m_frame_ready_callback;
 };

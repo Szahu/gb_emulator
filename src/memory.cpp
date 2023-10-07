@@ -44,6 +44,8 @@ void Memory::ReadByte(uint16_t addr, void* dest) const {
 void Memory::WriteByte(uint16_t addr, uint8_t byte) {
     LOG_MEM_VERBOSE(printf("MEM: WriteByte | addr: %02x | byte: %01x\n", addr, byte));
 
+    unsigned int consumed_m_cycles = 0;
+
     if (addr >= 0 && addr <= 0x1FFF) {
         // Write only ram enable
         m_ram_enable = (byte & 0x0F) == 0x0A;
@@ -55,6 +57,15 @@ void Memory::WriteByte(uint16_t addr, uint8_t byte) {
         uint8_t val = byte & 0b00011111;
         if (val != 0) val--;
         m_current_bank = val;
+        return;
+    }
+
+    if (addr == 0xFF46) {
+        // oam dma transfer
+        for (uint16_t i = 0; i < 0xA0; ++i) {
+            WriteByte(0xFE00 + i, ReadByte((byte << 8) + i));
+        }
+        consumed_m_cycles = 160;
         return;
     }
 
