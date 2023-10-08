@@ -21,10 +21,7 @@ void Ppu::oamScan(uint8_t scanline, OAM_t* oam_buffer, uint8_t& oam_buffer_index
             m_memory->ReadByte(oam_ptr+3),
         };
 
-        const bool double_height_mode = bitGet(m_memory->ReadByte(LCDC_ADDR), 2); 
-        if (double_height_mode) printf("DOUBLE HEIGHT NOT SUPPORTED\n");
-
-        const bool x_condition = oam.x_position >= 8;
+        const bool x_condition = oam.x_position >= 0;
         const bool y_condition = oam.y_position >= 16;
         const bool y_s_condition = scanline >= oam.y_position - 16 &&
                                     scanline < oam.y_position - 8;
@@ -43,11 +40,15 @@ void Ppu::oamScan(uint8_t scanline, OAM_t* oam_buffer, uint8_t& oam_buffer_index
 void Ppu::renderObjectLine(uint8_t scanline, OAM_t* oam_buffer, uint8_t buffer_size) {
 
     const uint8_t lcdc = m_memory->ReadByte(LCDC_ADDR);
-    const bool double_mode = bitGet(lcdc, 2);
-    if (double_mode) printf("DOUBLE MODE IS NOT SUPPORTED!\n");
+    const bool double_height_mode = bitGet(lcdc, 2);
+    if (double_height_mode) printf("DOUBLE HEIGHT NOT SUPPORTED!\n");
 
     for (uint8_t object_index = 0; object_index < buffer_size; ++object_index) {
-        const OAM_t current_oam = oam_buffer[object_index];
+        OAM_t current_oam = oam_buffer[object_index];
+        
+        if (double_height_mode) {
+            current_oam.tile_index &= 0xFE; // ignore the least significant bit in double mode
+        }
 
         const bool flip_x = bitGet(current_oam.flags, 5);
         const bool flip_y = bitGet(current_oam.flags, 6);
@@ -85,6 +86,8 @@ void Ppu::renderBackgroundLine(uint8_t scanline) {
 
     const uint8_t scx = m_memory->ReadByte(SCX_ADDR);
     const uint8_t scy = m_memory->ReadByte(SCY_ADDR);
+    const uint8_t wx = m_memory->ReadByte(WX_ADDR);
+    const uint8_t wy = m_memory->ReadByte(WY_ADDR);
 
     const uint8_t pixel_coord_y = (scanline + scy) & 0xFF;
     const uint16_t y_tile = pixel_coord_y / 8;
@@ -93,7 +96,7 @@ void Ppu::renderBackgroundLine(uint8_t scanline) {
 
     for (uint8_t x_offset = 0; x_offset < SCREEN_WIDTH; ++x_offset) {
         
-        const uint8_t pixel_coord_x = (x_offset + (scx / 8)) & 0xFF;
+        const uint8_t pixel_coord_x = (x_offset + (scx & 0xFF)) & 0xFF;
         const uint16_t x_tile = pixel_coord_x / 8;
 
         const uint8_t tile_idnex = m_memory->ReadByte(tilemap_addr + x_tile + (y_tile << 5));
@@ -132,9 +135,9 @@ void Ppu::writeByteWrap(uint16_t addr, uint8_t byte) {
 }
 
 void Ppu::requestStatInterrupt() {
-    // uint8_t requests = m_memory->ReadByte(0xFF0F);
-    // bitSet(requests, 1, 1);
-    // m_memory->WriteByte(0xFF0F, requests);
+    uint8_t requests = m_memory->ReadByte(0xFF0F);
+    bitSet(requests, 1, 1);
+    m_memory->WriteByte(0xFF0F, requests);
 }
 
 void Ppu::PpuStep(unsigned int last_m_cycle_count) {
@@ -153,12 +156,6 @@ void Ppu::PpuStep(unsigned int last_m_cycle_count) {
     uint8_t lyc = m_memory->ReadByte(LYC_ADDR);
     bitSet(stat, 0, bitGet(m_current_mode, 0));
     bitSet(stat, 1, bitGet(m_current_mode, 1));
-    if (m_memory->ReadByte(LY_ADDR) == lyc) {
-        bitSet(stat, 2, 1);
-        if (bitGet(stat, 6)) {
-            requestStatInterrupt();
-        }
-    }
     m_memory->WriteByte(STAT_ADDR, stat);
 
     m_dot_pool += 4 * last_m_cycle_count;
@@ -189,12 +186,13 @@ void Ppu::hBlankStep(uint8_t& current_scanline) {
     static unsigned int checkpoint = 0;
 
     switch (checkpoint) {
-        case 0:
-            if (bitGet(m_memory->ReadByte(STAT_ADDR), 0)) {
+        case 0: {
+            if (bitGet(m_memory->ReadByte(STAT_ADDR), 3)) {
                 requestStatInterrupt();
             }
             checkpoint++;
             break;
+        }
         case 1:
 
             if (m_dot_pool < 87) {
@@ -234,6 +232,7 @@ void Ppu::vBlankStep(uint8_t& current_scanline) {
             if (bitGet(m_memory->ReadByte(STAT_ADDR), 4)) {
                 requestStatInterrupt();
             }
+
             checkpoint++;
             break;
         }
@@ -279,6 +278,19 @@ void Ppu::oamScanStep(uint8_t& current_scanline, OAM_t* oam_buffer, uint8_t& oam
             if (bitGet(m_memory->ReadByte(STAT_ADDR), 5)) {
                 requestStatInterrupt();
             }
+
+            uint8_t stat = m_memory->ReadByte(STAT_ADDR);
+            uint8_t lyc = m_memory->ReadByte(LYC_ADDR);
+            if (m_memory->ReadByte(LY_ADDR) == lyc) {
+                bitSet(stat, 2, 1);
+                if (bitGet(stat, 6)) {
+                    requestStatInterrupt();
+                }
+            } else {
+                bitSet(stat, 2, 0);
+            }
+            m_memory->WriteByte(LYC_ADDR, stat);
+        
             oam_buffer_size = 0;
             checkpoint++;
             break;
@@ -318,10 +330,10 @@ void Ppu::drawingStep(uint8_t& current_scanline, OAM_t* oam_buffer, uint8_t buff
     static unsigned int checkpoint = 0;
 
     switch (checkpoint) {
-        case 0:
-            renderBackgroundLine(current_scanline);
-            renderObjectLine(current_scanline, oam_buffer, buffer_size);
+        case 0: {
             checkpoint++;
+            break;
+        }
         case 1: {
             if (m_dot_pool < 289) {
                 m_current_dots_need = 289;
@@ -329,6 +341,9 @@ void Ppu::drawingStep(uint8_t& current_scanline, OAM_t* oam_buffer, uint8_t buff
             }
             m_dot_pool -= 289;
             m_current_dots_need = 0;
+
+            renderBackgroundLine(current_scanline);
+            renderObjectLine(current_scanline, oam_buffer, buffer_size);
 
             m_current_mode = mode_t::H_Blank;
             checkpoint = 0;

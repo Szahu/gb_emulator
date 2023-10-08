@@ -67,10 +67,14 @@ private:
     static constexpr unsigned int SCREEN_WIDTH = 160;
     static constexpr unsigned int SCREEN_HEIGHT = 144;
 
-    static constexpr uint8_t PALETTE[] = {0xe0, 0xf8, 0xd0, 
-                                          0x88, 0xc0, 0x70,
-                                          0x34, 0x68, 0x56,
-                                          0x08, 0x18, 0x20};
+    // static constexpr uint8_t PALETTE[] = {0xe0, 0xf8, 0xd0, 
+    //                                       0x88, 0xc0, 0x70,
+    //                                       0x34, 0x68, 0x56,
+    //                                       0x08, 0x18, 0x20};
+    static constexpr uint8_t PALETTE[] = {0xFF, 0xFF, 0xFF, 
+                                          0xAA, 0xAA, 0xAA,
+                                          0x55, 0x55, 0x55,
+                                          0x00, 0x00, 0x00};
 
     // static constexpr uint8_t palette[] = {
     //     0x08, 0x18, 0x20, 0x34, 0x68, 0x56, 0x88, 0xc0, 0x70, 0xe0, 0xf8, 0xd0};

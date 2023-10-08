@@ -93,15 +93,12 @@ void updateKeymap(Memory& mem, bool* buttons) {
     bool action = bitGet(current_val, 5);
     bool trigger_interrupt = false;
     for (uint8_t i = 0;i < 4; ++i) {
-        if (!direction && !action) {
-            bitSet(current_val, i, !(buttons[i] && buttons[i + 4]));
-            trigger_interrupt = true;
-        } else if (!direction) {
+        if (!direction) {
             bitSet(current_val, i, !(buttons[i]));
-            trigger_interrupt = true;
+            trigger_interrupt = trigger_interrupt || (buttons[i]);
         } else if (!action) {
             bitSet(current_val, i, !(buttons[i + 4]));
-            trigger_interrupt = true;
+            trigger_interrupt = trigger_interrupt || (buttons[i + 4]);
         } else {
             bitSet(current_val, i, 1);
         }
