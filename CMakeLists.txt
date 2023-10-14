@@ -2,9 +2,11 @@ cmake_minimum_required(VERSION 3.22)
 
 project(gb_emulator)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+set(VS_PATH "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.33.31629")
 
 set(VENDOR_DIR ${CMAKE_SOURCE_DIR}/vendor)
 
@@ -28,3 +30,11 @@ include_directories(${VENDOR_DIR}/SDL/include)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES COMPILE_DEFINITIONS "PROJECT_DIR=\"${CMAKE_SOURCE_DIR}\"")
 target_link_libraries(${PROJECT_NAME} SDL3::SDL3)
+
+if (WIN32)
+endif (WIN32)
+
+if (UNIX)
+	target_compile_options(gb_emulator PUBLIC "-fsanitize=address" "-O1")
+	target_link_options(gb_emulator PUBLIC "-g" "-fsanitize=address")
+endif (UNIX)

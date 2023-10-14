@@ -9,7 +9,8 @@ public:
 
 private:
     Memory* m_memory;
-    unsigned int m_cycle_pool = 0;
+    unsigned int m_cycle_pool_tima = 0;
+    unsigned int m_cycle_pool_div = 0;
 
     static constexpr uint16_t DIV_ADDR = 0xFF04;
     static constexpr uint16_t TIMA_ADDR = 0xFF05;

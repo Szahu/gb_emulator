@@ -93,7 +93,7 @@ void Cpu::setFlags(bool h, bool c, bool z, bool n) {
 void Cpu::handleInterrupts(unsigned int& cycle_count) {
     uint8_t interrupts_requests = m_memory->ReadByte(IE_FLAG_ADDR);
     uint8_t interrupts_enables = m_memory->ReadByte(IE_ENABLE_ADDR);
-
+    // VBlank, LCD_STAT, Timer, Serial, Joypad
     uint16_t handlers[] = {0x40, 0x48, 0x50, 0x58, 0x60};
 
     for (uint8_t i = 0;i < 5; ++i) {
@@ -119,15 +119,30 @@ void Cpu::handleInterrupts(unsigned int& cycle_count) {
 
 void Cpu::CpuStep(std::atomic<bool>& stop_signal, unsigned int& cycle_count) {
     
+    handleInterrupts(cycle_count);
+
     if (m_enable_ime_next_cycle) { 
         m_ime = true;
         m_enable_ime_next_cycle = false;
     }
 
     if (!m_halted) {
+        unsigned int cycle_count_beofre = cycle_count;
+
         uint8_t instruction = m_memory->ReadByte(PC);
 
-        LOG_CPU_VERBOSE(printf("opcode: %02x PC: %04x\n", instruction, PC);)
+        if (instruction == 0xFF) {
+            printf("Read insutrction 0xFF\n");
+            throw std::runtime_error("Read insutrction 0xFF\n");
+        }
+
+        LOG_CPU_VERBOSE(
+            printf("PC: %04x opcode: %02x AF: %04x BC: %04x DE: %04x HL: %04x SP: %04x IME: %d\n", 
+            PC, instruction, AF_GET, BC_GET, DE_GET, HL_GET, SP, m_ime);
+        )
+        
+        if (m_past_instrs.size() == PAST_INTRS_BUFFER_SIZE) m_past_instrs.pop_front();
+        m_past_instrs.push_back({PC, instruction});
         PC += 1;
 
         if (instruction == 0xCB) {
@@ -139,8 +154,6 @@ void Cpu::CpuStep(std::atomic<bool>& stop_signal, unsigned int& cycle_count) {
     } else {
         cycle_count += 1;
     }
-
-    handleInterrupts(cycle_count);
 }
 
 void Cpu::decodeAndExecuteNonCB(uint8_t opcode, std::atomic<bool>& stop_signal, unsigned int& m_cycles_count) {
@@ -182,12 +195,12 @@ void Cpu::decodeAndExecuteNonCB(uint8_t opcode, std::atomic<bool>& stop_signal, 
             m_cycles_count = 2;
             break;
         }
-        // ld [HL], n8 | 2 M-cycles 
+        // ld [HL], n8 | 3 M-cycles 
         case 0x36:
         {
             uint8_t byte_to_write = m_memory->ReadByte(PC++);
             m_memory->WriteByte(HL_GET, byte_to_write);
-            m_cycles_count = 2;
+            m_cycles_count = 3;
             break;
         }
         // ld A, [BC] | 2 M-cycles
@@ -692,7 +705,7 @@ void Cpu::decodeAndExecuteNonCB(uint8_t opcode, std::atomic<bool>& stop_signal, 
             add(SP & 0x00FF, operand, false, &half_carry, &full_carry);
             SP += operand;
             setFlags(half_carry, full_carry, 0, 0);
-            m_cycles_count = 2;
+            m_cycles_count = 4;
             break;
         }
         // LD HL, SP + dd | 3 M-cycles
@@ -966,7 +979,7 @@ void Cpu::decodeAndExecuteCB(uint8_t opcode, unsigned int& m_cycles_count) {
             bitSet(val, 0, side_bit);
             setFlags(0, side_bit, val == 0, 0);
             m_memory->WriteByte(HL_GET, val);
-            m_cycles_count = 2;
+            m_cycles_count = 4;
             break;
         }
         // case RRC | 2 M-cycles
@@ -989,7 +1002,7 @@ void Cpu::decodeAndExecuteCB(uint8_t opcode, unsigned int& m_cycles_count) {
             bitSet(val, 7, side_bit);
             setFlags(0, side_bit, val == 0, 0);
             m_memory->WriteByte(HL_GET, val);
-            m_cycles_count = 2;
+            m_cycles_count = 4;
             break;
         }
         // RL r | 2 M-cycles

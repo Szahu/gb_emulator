@@ -38,7 +38,10 @@ private:
     uint8_t* m_memory = nullptr;
     size_t m_memory_size = 0;
     std::vector<uint8_t*> m_rom_banks;
-    uint8_t m_current_bank = 0;
+    std::vector<uint8_t*> m_ram_banks;
+    uint8_t m_current_rom_bank = 0;
+    uint8_t m_current_ram_bank = 0;
     bool m_ram_enable = false;
     bool m_advanced_banking_mode = false;
+    bool m_multicart_rom = false;
 };

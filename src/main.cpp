@@ -1,7 +1,6 @@
 #include <iostream>
 #include <fstream>
 #include "cpu.hpp"
-#include <thread>
 #include <chrono>
 #include <memory>
 #include "ppu.hpp"
@@ -9,7 +8,8 @@
 #include "timer.hpp"
 #include <atomic>
 #include <vector>
-#include <mutex>
+#include <thread>
+#include <numeric>
 
 void load_program_from_file(const std::string &filename, std::vector<uint8_t>& data);
 void setupPostBootData(Memory& mem);
@@ -19,14 +19,15 @@ int main(int argc, char** argv) {
 
     std::cout << "Starting the emulator" << std::endl;
 
-    const unsigned int frequency = 1048576;
+    const unsigned int frequency = 1 << 20;
     const unsigned int mem_size = 0xFFFF + 1;
 
-    uint8_t* framebuffer = new uint8_t[160 * 144 * 3];
+    std::vector<uint8_t> framebuffer(160 * 144 * 3);
+    bool frame_ready = false;
 
     Memory mem(mem_size);
     Cpu cpu(&mem, frequency);
-    Ppu ppu(&mem, framebuffer, [] () {});
+    Ppu ppu(&mem, framebuffer, [&frame_ready] () {frame_ready = true;});
     Timer timer(&mem);
 
     // right left up down a b select start
@@ -34,14 +35,13 @@ int main(int argc, char** argv) {
 
     std::atomic<bool> stop_signal = false;
 
-    const long long frame_duration_micros = static_cast<long>(1000000.0f / 60.0f);
+    const long long frame_duration_micros = static_cast<long>(1000000.0f / 120.0f);
 
     const std::string game_rom_path = PROJECT_DIR"/roms/mario.gb";
 
     std::vector<uint8_t> rom_buffer;
     load_program_from_file(game_rom_path, rom_buffer);
     mem.LoadRom(rom_buffer.data(), rom_buffer.size());
-
     rom_buffer = std::vector<uint8_t>();
 
     std::cout << "Running rom: " << game_rom_path << std::endl;
@@ -49,16 +49,11 @@ int main(int argc, char** argv) {
     setupPostBootData(mem);
     cpu.PostBoodSetup();
 
-    std::thread gui_thread([&] () {
-        Gui gui(160, 144, framebuffer, button_map);
-        while (!stop_signal) {
-            gui.RenderFrame(stop_signal);
-        }
-    });
-
+    Gui gui(160, 144, framebuffer.data(), button_map);
+    
     unsigned int cycle_count = 0;
     auto start = std::chrono::high_resolution_clock::now();    
-
+    
     while (!stop_signal) {
 
         updateKeymap(mem, button_map);
@@ -66,9 +61,14 @@ int main(int argc, char** argv) {
         unsigned int tmp = 0;
         cpu.CpuStep(stop_signal, tmp);
         ppu.PpuStep(tmp);
-        timer.TimerStep(tmp);
+        // timer.TimerStep(tmp);
 
         cycle_count += tmp;
+
+        if (frame_ready) {
+            gui.RenderFrame(stop_signal);
+            frame_ready = false;
+        }
 
         auto stop = std::chrono::high_resolution_clock::now();
         const long long duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count();
@@ -79,9 +79,8 @@ int main(int argc, char** argv) {
         }
     }
 
-    gui_thread.join();
+    // checker.join();
 
-    delete[] framebuffer;
     std::cout << "Terminating the emulator" << std::endl;
 
     return 0;

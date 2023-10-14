@@ -1,8 +1,9 @@
 #include "ppu.hpp"
 #include "common.hpp"
 #include <memory>
+#include <stdexcept>
 
-Ppu::Ppu(Memory *mem_ref, uint8_t* frame_buffer_ref, std::function<void()> frame_ready_callback)
+Ppu::Ppu(Memory *mem_ref, std::vector<uint8_t>& frame_buffer_ref, std::function<void()> frame_ready_callback)
 :m_memory{mem_ref}, m_framebuffer{frame_buffer_ref} {
     m_frame_ready_callback = frame_ready_callback;
 }
@@ -21,7 +22,7 @@ void Ppu::oamScan(uint8_t scanline, OAM_t* oam_buffer, uint8_t& oam_buffer_index
             m_memory->ReadByte(oam_ptr+3),
         };
 
-        const bool x_condition = oam.x_position >= 0;
+        const bool x_condition = oam.x_position > 0;
         const bool y_condition = oam.y_position >= 16;
         const bool y_s_condition = scanline >= oam.y_position - 16 &&
                                     scanline < oam.y_position - 8;
@@ -38,6 +39,7 @@ void Ppu::oamScan(uint8_t scanline, OAM_t* oam_buffer, uint8_t& oam_buffer_index
 }
 
 void Ppu::renderObjectLine(uint8_t scanline, OAM_t* oam_buffer, uint8_t buffer_size) {
+    ASSERT(scanline < SCREEN_HEIGHT);
 
     const uint8_t lcdc = m_memory->ReadByte(LCDC_ADDR);
     const bool double_height_mode = bitGet(lcdc, 2);
@@ -61,13 +63,17 @@ void Ppu::renderObjectLine(uint8_t scanline, OAM_t* oam_buffer, uint8_t buffer_s
         const uint8_t first_byte = m_memory->ReadByte(tile_addr + 2 * y_offset_local);
         const uint8_t second_byte = m_memory->ReadByte(tile_addr + 2 * y_offset_local + 1);
 
-        for (uint8_t pixel_x = 0; pixel_x < 8; pixel_x++) {
+        int x_offset = 0 + current_oam.x_position - 8;
+        for (uint8_t pixel_x = 0; pixel_x < 8 && x_offset < static_cast<int>(SCREEN_WIDTH); pixel_x++) {
             const uint8_t bit_number = flip_x ? pixel_x : 7 - pixel_x;
             const uint8_t color_index = (static_cast<uint8_t>(bitGet(first_byte, bit_number))) | 
                                         (static_cast<uint8_t>(bitGet(second_byte, bit_number)) << 1);
             
+            x_offset = pixel_x + current_oam.x_position - 8;
+
+            if (x_offset < 0) continue;
+
             if (color_index != 0) {
-                uint8_t x_offset = pixel_x + current_oam.x_position - 8;
                 m_framebuffer[scanline * SCREEN_WIDTH * 3 + x_offset * 3] = PALETTE[color_index * 3];
                 m_framebuffer[scanline * SCREEN_WIDTH * 3 + x_offset * 3 + 1] = PALETTE[color_index * 3 + 1];
                 m_framebuffer[scanline * SCREEN_WIDTH * 3 + x_offset * 3 + 2] = PALETTE[color_index * 3 + 2];
@@ -78,10 +84,12 @@ void Ppu::renderObjectLine(uint8_t scanline, OAM_t* oam_buffer, uint8_t buffer_s
 }
 
 void Ppu::renderBackgroundLine(uint8_t scanline) {
+        
+    if (scanline >= SCREEN_HEIGHT) {
+        throw std::runtime_error("Out of range rendering!");
+    }
 
     const uint8_t LCDC = m_memory->ReadByte(LCDC_ADDR);
-    const uint16_t tilemap_addr = (bitGet(LCDC, 3) == 1) ? 0x9c00 : 0x9800;    
-
     const bool tile_data_unsigned_addressing = bitGet(LCDC, 4);
 
     const uint8_t scx = m_memory->ReadByte(SCX_ADDR);
@@ -96,6 +104,12 @@ void Ppu::renderBackgroundLine(uint8_t scanline) {
 
     for (uint8_t x_offset = 0; x_offset < SCREEN_WIDTH; ++x_offset) {
         
+        const bool inside_window = x_offset + 7 >= wx && scanline >= wy && bitGet(LCDC, 5);
+
+        uint16_t tilemap_addr = 0x9800;
+        if (!inside_window && bitGet(LCDC, 3)) tilemap_addr = 0x9C00;
+        if (inside_window && bitGet(LCDC, 6)) tilemap_addr = 0x9C00;
+
         const uint8_t pixel_coord_x = (x_offset + (scx & 0xFF)) & 0xFF;
         const uint16_t x_tile = pixel_coord_x / 8;
 
@@ -134,6 +148,25 @@ void Ppu::writeByteWrap(uint16_t addr, uint8_t byte) {
 
 }
 
+void Ppu::newScanlineCallback(uint8_t current_scanline) {
+
+    m_memory->WriteByte(LY_ADDR, current_scanline);
+
+    uint8_t stat = m_memory->ReadByte(STAT_ADDR);
+    uint8_t lyc = m_memory->ReadByte(LYC_ADDR);
+
+    if (current_scanline == lyc) {
+        bitSet(stat, 2, 1);
+        if (bitGet(stat, 6)) {
+            requestStatInterrupt();
+        }
+    } else {
+        bitSet(stat, 2, 0);
+    }
+    m_memory->WriteByte(STAT_ADDR, stat);
+
+}
+
 void Ppu::requestStatInterrupt() {
     uint8_t requests = m_memory->ReadByte(0xFF0F);
     bitSet(requests, 1, 1);
@@ -152,8 +185,8 @@ void Ppu::PpuStep(unsigned int last_m_cycle_count) {
         return;
     }
 
+    // update current mode
     uint8_t stat = m_memory->ReadByte(STAT_ADDR);
-    uint8_t lyc = m_memory->ReadByte(LYC_ADDR);
     bitSet(stat, 0, bitGet(m_current_mode, 0));
     bitSet(stat, 1, bitGet(m_current_mode, 1));
     m_memory->WriteByte(STAT_ADDR, stat);
@@ -164,16 +197,16 @@ void Ppu::PpuStep(unsigned int last_m_cycle_count) {
 
     while (m_dot_pool >= m_current_dots_need) {
         switch (m_current_mode) {
-            case mode_t::H_Blank:
+            case ppu_mode_t::H_Blank:
                 hBlankStep(current_scanline);
                 break;
-            case mode_t::V_Blank:
+            case ppu_mode_t::V_Blank:
                 vBlankStep(current_scanline);
                 break;
-            case mode_t::OAM_Scan:
+            case ppu_mode_t::OAM_Scan:
                 oamScanStep(current_scanline, oam_buffer, buffer_size);
                 break;
-            case mode_t::Drawing:
+            case ppu_mode_t::Drawing:
                 drawingStep(current_scanline, oam_buffer, buffer_size);
                 break;
             default:
@@ -203,12 +236,14 @@ void Ppu::hBlankStep(uint8_t& current_scanline) {
             m_current_dots_need = 0;
             
             if (current_scanline == SCREEN_HEIGHT - 1) {
-                m_current_mode = mode_t::V_Blank;
+                m_current_mode = ppu_mode_t::V_Blank;
+                current_scanline++;
+                newScanlineCallback(current_scanline);
                 m_frame_ready_callback();
             } else {
                 current_scanline++;
-                m_memory->WriteByte(LY_ADDR, current_scanline);
-                m_current_mode = mode_t::OAM_Scan;
+                newScanlineCallback(current_scanline);
+                m_current_mode = ppu_mode_t::OAM_Scan;
             }
 
             checkpoint = 0;
@@ -250,17 +285,16 @@ void Ppu::vBlankStep(uint8_t& current_scanline) {
         }
         case 2: {
 
-            if (current_scanline == 152) {
-                m_current_mode = mode_t::OAM_Scan;
+            if (current_scanline == 153) {
+                m_current_mode = ppu_mode_t::OAM_Scan;
                 current_scanline = 0;
-                m_memory->WriteByte(LY_ADDR, current_scanline);
+                newScanlineCallback(current_scanline);
                 checkpoint = 0;
             } else {
                 current_scanline++;
-                m_memory->WriteByte(LY_ADDR, current_scanline);
+                newScanlineCallback(current_scanline);
                 checkpoint = 1;
             }
-
 
             break;
         }
@@ -278,18 +312,6 @@ void Ppu::oamScanStep(uint8_t& current_scanline, OAM_t* oam_buffer, uint8_t& oam
             if (bitGet(m_memory->ReadByte(STAT_ADDR), 5)) {
                 requestStatInterrupt();
             }
-
-            uint8_t stat = m_memory->ReadByte(STAT_ADDR);
-            uint8_t lyc = m_memory->ReadByte(LYC_ADDR);
-            if (m_memory->ReadByte(LY_ADDR) == lyc) {
-                bitSet(stat, 2, 1);
-                if (bitGet(stat, 6)) {
-                    requestStatInterrupt();
-                }
-            } else {
-                bitSet(stat, 2, 0);
-            }
-            m_memory->WriteByte(LYC_ADDR, stat);
         
             oam_buffer_size = 0;
             checkpoint++;
@@ -310,7 +332,7 @@ void Ppu::oamScanStep(uint8_t& current_scanline, OAM_t* oam_buffer, uint8_t& oam
             total_dots += 8;
 
             if (total_dots == 80) {
-                m_current_mode = mode_t::Drawing;
+                m_current_mode = ppu_mode_t::Drawing;
                 m_current_dots_need = 0;
                 checkpoint = 0;
                 total_dots = 0;
@@ -345,7 +367,7 @@ void Ppu::drawingStep(uint8_t& current_scanline, OAM_t* oam_buffer, uint8_t buff
             renderBackgroundLine(current_scanline);
             renderObjectLine(current_scanline, oam_buffer, buffer_size);
 
-            m_current_mode = mode_t::H_Blank;
+            m_current_mode = ppu_mode_t::H_Blank;
             checkpoint = 0;
             break;
         }
@@ -353,5 +375,4 @@ void Ppu::drawingStep(uint8_t& current_scanline, OAM_t* oam_buffer, uint8_t buff
             printf("Wrong checkpoint in drawingStep: %u\n", checkpoint);
     }
 }
-
 

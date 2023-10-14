@@ -5,6 +5,7 @@
 #include <thread>
 #include <cstring>
 #include <cstdio>
+#include <list>
 #include "common.hpp"
 
 #define SLEEP_MINIS(ms) std::this_thread::sleep_for(std::chrono::milliseconds(ms));
@@ -38,6 +39,8 @@
 
 #define HL_GET static_cast<uint16_t>((m_regs[REG_H] << 8) | m_regs[REG_L])
 #define HL_SET(x) uint16_t tmp = x; m_regs[REG_H] = (tmp & 0xFF00) >> 8; m_regs[REG_L] = (tmp & 0x00FF);
+
+#define AF_GET static_cast<uint16_t>((m_regs[REG_A] << 8) | m_regs[REG_F])
 
 class Cpu {
 public:
@@ -104,4 +107,8 @@ private:
     bool m_ime = false;
 
     bool m_log_verbose = true;
+    std::list<std::pair<uint16_t, uint8_t>> m_past_instrs;
+    static constexpr size_t PAST_INTRS_BUFFER_SIZE = 15;
+
+    bool m_write_logs_to_file = true;
 };
