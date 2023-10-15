@@ -30,6 +30,9 @@ public:
     uint8_t ReadByte(uint16_t addr) const;
     void WriteByte(uint16_t addr, uint8_t byte);
 
+    uint8_t ReadByteDirect(uint16_t addr) const;
+    void WriteByteDirect(uint16_t addr, uint8_t byte);
+
     void LoadRom(uint8_t* buffer, size_t size);
 
     void CleanMemory();

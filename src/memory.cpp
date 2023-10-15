@@ -2,6 +2,8 @@
 #include <cstring>
 #include <cstdio>
 #include <stdexcept>
+#include "ppu.hpp"
+#include "common.hpp"
 
 #ifdef LOG_MEM_LEVEL_VERBOSE
 #define LOG_MEM_VERBOSE(x) x
@@ -45,6 +47,27 @@ uint8_t Memory::ReadByte(uint16_t addr) const {
         return m_ram_banks[m_current_ram_bank][addr % 0x2000];
     }
 
+    if (addr >= 0x8000 && addr <= 0x9FFF) {
+        // VRAM read
+        uint8_t current_mode = m_memory[0xFF41] & 0x3;
+        if (current_mode > 2) return 0xFF;
+        return m_memory[addr];
+    }
+
+    if (addr >= 0xE000 && addr <= 0xFDFF) {
+        // echo ram write
+        printf("Reading from echo ram!\n");
+        ASSERT(false);
+        return 0xFF;
+    }
+
+    if (addr >= 0xFE00 && addr <= 0xFE9F) {
+        // OAM read
+        uint8_t current_mode = m_memory[0xFF41] & 0x3;
+        if (current_mode > 1) return 0xFF;
+        return m_memory[addr];
+    }
+
     return m_memory[addr];
 }
 
@@ -69,18 +92,9 @@ void Memory::WriteByte(uint16_t addr, uint8_t byte) {
         if (val != 0) val--;
         if (val >= m_rom_banks.size()) {
             printf("Trying to set current rom bank to a wrong value %u\n", val);
-            throw std::runtime_error("Trying to set current rom bank to a wrong value");
+            ASSERT(false);
         }
         m_current_rom_bank = val;
-        return;
-    }
-
-    if (addr == 0xFF46) {
-        // oam dma transfer
-        for (uint16_t i = 0; i < 0xA0; ++i) {
-            WriteByte(0xFE00 + i, ReadByte((byte << 8) + i));
-        }
-        consumed_m_cycles = 160;
         return;
     }
 
@@ -88,7 +102,7 @@ void Memory::WriteByte(uint16_t addr, uint8_t byte) {
         // ram bank selector
         if (m_advanced_banking_mode) {
             m_current_ram_bank = byte & 0b11;
-        } else {
+        } else if (m_rom_banks.size() > 32) {
             m_current_rom_bank = m_current_rom_bank | ((byte & 0b11) << 5);
         }
 
@@ -97,7 +111,6 @@ void Memory::WriteByte(uint16_t addr, uint8_t byte) {
 
     if (addr >= 0xA000 && addr <= 0xBFFF) {
         if (!m_ram_enable) return;
-
         //external ram
         m_ram_banks[m_current_ram_bank][addr % 0x2000] = byte;
         return;
@@ -105,11 +118,58 @@ void Memory::WriteByte(uint16_t addr, uint8_t byte) {
 
     if (addr >= 0x6000 && addr <= 0x7FFF) {
         // ROM/RAM selector
-        m_advanced_banking_mode = (byte & 0b1) && 
-            m_rom_banks.size() > 32 && m_ram_banks.size() > 1;
+        m_advanced_banking_mode = (byte & 0b1) && m_ram_banks.size() >= 0;
         return;
     }
 
+    if (addr == 0xFF04) {
+        // reset DIV
+        m_memory[0xFF04] = 0;
+        return;
+    }
+
+    if (addr >= 0x8000 && addr <= 0x9FFF) {
+        // VRAM write
+        uint8_t current_mode = m_memory[0xFF41] & 0x3;
+        if (current_mode > 2) return;
+        m_memory[addr] = byte;
+        return;
+    }
+
+    if (addr >= 0xE000 && addr <= 0xFDFF) {
+        // echo ram write
+        printf("Writing to echo ram!\n");
+        ASSERT(false);
+        return;
+    }
+
+    if (addr == 0xFF46) {
+        // oam dma transfer
+        uint8_t current_mode = m_memory[0xFF41] & 0x3;
+        if (current_mode > 1) return;
+        for (uint16_t i = 0; i < 0xA0; ++i) {
+            WriteByte(0xFE00 + i, ReadByte((byte << 8) + i));
+        }
+        consumed_m_cycles = 160;
+        return;
+    }
+
+    if (addr >= 0xFE00 && addr <= 0xFE9F) {
+        // OAM read
+        uint8_t current_mode = m_memory[0xFF41] & 0x3;
+        if (current_mode > 1) return;
+        m_memory[addr] = byte;
+        return;
+    }
+
+    m_memory[addr] = byte;
+}
+
+uint8_t Memory::ReadByteDirect(uint16_t addr) const {
+    return m_memory[addr];
+}
+
+void Memory::WriteByteDirect(uint16_t addr, uint8_t byte) {
     m_memory[addr] = byte;
 }
 
@@ -137,7 +197,7 @@ void Memory::LoadRom(uint8_t* buffer, size_t size) {
     }
 
     for (uint8_t i = 0;i < number_of_ram_banks; ++i) {
-        m_rom_banks.push_back(new uint8_t[1 << 13]);
+        m_ram_banks.push_back(new uint8_t[1 << 13]);
     }
 
     printf("ROM type: %u ROM banks: %u RAM banks: %u\n", 

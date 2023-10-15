@@ -44,9 +44,6 @@ private:
 
     void newScanlineCallback(uint8_t current_scanline);
 
-    uint8_t readByteWrap(uint16_t addr);
-    void writeByteWrap(uint16_t addr, uint8_t byte);
-
 private:
 
     static constexpr uint16_t LCDC_ADDR = 0xFF40; // address of LCD control register

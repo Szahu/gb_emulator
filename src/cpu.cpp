@@ -2,7 +2,7 @@
 #include <cstring>
 #include <iostream>
 
-// #define LOG_CPU_LEVEL_VERBOSE
+#define LOG_CPU_LEVEL_VERBOSE
 
 #ifdef LOG_CPU_LEVEL_VERBOSE
 #define LOG_CPU_VERBOSE(x) if (m_log_verbose) x
@@ -101,6 +101,7 @@ void Cpu::handleInterrupts(unsigned int& cycle_count) {
             m_halted = false;
 
             if (m_ime) {
+                LOG_CPU_VERBOSE(printf("Handling interrupt %u\n", i);)
                 m_ime = false;
                 bitSet(interrupts_requests, i, 0);
                 m_memory->WriteByte(IE_FLAG_ADDR, interrupts_requests);
@@ -127,19 +128,17 @@ void Cpu::CpuStep(std::atomic<bool>& stop_signal, unsigned int& cycle_count) {
     }
 
     if (!m_halted) {
-        unsigned int cycle_count_beofre = cycle_count;
-
         uint8_t instruction = m_memory->ReadByte(PC);
+
+        LOG_CPU_VERBOSE(
+            printf("PC: %04X opcode: %02X AF: %04X BC: %04X DE: %04X HL: %04X SP: %04X IME: %d IE: %02X IF: %02X\n", 
+            PC, instruction, AF_GET, BC_GET, DE_GET, HL_GET, SP, m_ime, m_memory->ReadByteDirect(IE_ENABLE_ADDR), m_memory->ReadByteDirect(IE_FLAG_ADDR));
+        )
 
         if (instruction == 0xFF) {
             printf("Read insutrction 0xFF\n");
             throw std::runtime_error("Read insutrction 0xFF\n");
         }
-
-        LOG_CPU_VERBOSE(
-            printf("PC: %04x opcode: %02x AF: %04x BC: %04x DE: %04x HL: %04x SP: %04x IME: %d\n", 
-            PC, instruction, AF_GET, BC_GET, DE_GET, HL_GET, SP, m_ime);
-        )
         
         if (m_past_instrs.size() == PAST_INTRS_BUFFER_SIZE) m_past_instrs.pop_front();
         m_past_instrs.push_back({PC, instruction});
@@ -902,7 +901,7 @@ void Cpu::decodeAndExecuteNonCB(uint8_t opcode, std::atomic<bool>& stop_signal, 
             uint8_t msb = m_memory->ReadByte(SP++);
             uint16_t addr = (msb << 8) | lsb;
             PC = addr;
-            m_ime = true;
+            m_enable_ime_next_cycle = true;
             m_cycles_count = 4;
             break;
         }

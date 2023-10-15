@@ -32,13 +32,20 @@
 #define FLAG_N bitGet(m_regs[REG_F], FLAG_N_BIT)
 
 #define BC_GET static_cast<uint16_t>((m_regs[REG_B] << 8) | m_regs[REG_C])
-#define BC_SET(x) uint16_t tmp = x; m_regs[REG_B] = (tmp & 0xFF00) >> 8; m_regs[REG_C] = (tmp & 0x00FF);
+#define BC_SET(x)                                               \
+    uint16_t tmp = static_cast<uint16_t>(x);                    \
+    m_regs[REG_B] = static_cast<uint8_t>((tmp & 0xFF00) >> 8);  \
+    m_regs[REG_C] = static_cast<uint8_t>tmp & 0x00FF);          \
 
 #define DE_GET static_cast<uint16_t>((m_regs[REG_D] << 8) | m_regs[REG_E])
 #define DE_SET(x) uint16_t tmp = x; m_regs[REG_D] = (tmp & 0xFF00) >> 8; m_regs[REG_E] = (tmp & 0x00FF);
 
 #define HL_GET static_cast<uint16_t>((m_regs[REG_H] << 8) | m_regs[REG_L])
-#define HL_SET(x) uint16_t tmp = x; m_regs[REG_H] = (tmp & 0xFF00) >> 8; m_regs[REG_L] = (tmp & 0x00FF);
+
+#define HL_SET(x)                                               \
+    uint16_t tmp = static_cast<uint16_t>(x);                    \
+    m_regs[REG_H] = static_cast<uint8_t>((tmp & 0xFF00) >> 8);  \
+    m_regs[REG_L] = static_cast<uint8_t>(tmp & 0x00FF);         \
 
 #define AF_GET static_cast<uint16_t>((m_regs[REG_A] << 8) | m_regs[REG_F])
 
@@ -65,7 +72,7 @@ public:
         SP = 0xFFFE;
 
         m_halted = false;
-        m_ime = true;
+        m_ime = false;
     }
 
 private:

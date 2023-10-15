@@ -37,6 +37,7 @@ int main(int argc, char** argv) {
 
     const long long frame_duration_micros = static_cast<long>(1000000.0f / 120.0f);
 
+    // const std::string game_rom_path = PROJECT_DIR"/roms/mts-20221022-1430-8d742b9/emulator-only/mbc1/ram_64kb.gb";
     const std::string game_rom_path = PROJECT_DIR"/roms/mario.gb";
 
     std::vector<uint8_t> rom_buffer;
@@ -53,7 +54,11 @@ int main(int argc, char** argv) {
     
     unsigned int cycle_count = 0;
     auto start = std::chrono::high_resolution_clock::now();    
-    
+
+    bool verbose_logging = argc > 1;
+
+    cpu.SetLogVerbose(verbose_logging);
+
     while (!stop_signal) {
 
         updateKeymap(mem, button_map);
@@ -61,13 +66,18 @@ int main(int argc, char** argv) {
         unsigned int tmp = 0;
         cpu.CpuStep(stop_signal, tmp);
         ppu.PpuStep(tmp);
-        // timer.TimerStep(tmp);
+        timer.TimerStep(tmp);
 
         cycle_count += tmp;
 
         if (frame_ready) {
             gui.RenderFrame(stop_signal);
             frame_ready = false;
+        }
+
+        if (button_map[6]) {
+            verbose_logging = !verbose_logging;
+            cpu.SetLogVerbose(verbose_logging);
         }
 
         auto stop = std::chrono::high_resolution_clock::now();
@@ -78,8 +88,6 @@ int main(int argc, char** argv) {
             cycle_count = 0;
         }
     }
-
-    // checker.join();
 
     std::cout << "Terminating the emulator" << std::endl;
 
@@ -178,5 +186,6 @@ void setupPostBootData(Memory& mem) {
     mem.WriteByte(0xFF6A, 0xFF);   // OCPS
     mem.WriteByte(0xFF6B, 0xFF);   // OCPD
     mem.WriteByte(0xFF70, 0xFF);   // SVBK
+    mem.WriteByte(0xFF0F, 0x00);   // IF
     mem.WriteByte(0xFFFF, 0x00);   // IE
 }

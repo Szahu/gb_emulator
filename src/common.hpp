@@ -1,7 +1,6 @@
 #pragma once
 
 #include <stdexcept>
-#include "memory.hpp"
 
 inline static void bitSet(uint8_t& number, uint8_t n, bool x) {
     number = (number & ~((uint8_t)1 << n)) | ((uint8_t)x << n);
