@@ -2,7 +2,6 @@
 
 #include "memory.hpp"                    
 #include <chrono>
-#include <thread>
 #include <cstring>
 #include <cstdio>
 #include <list>
@@ -54,9 +53,7 @@ public:
 
     Cpu(Memory* memory_ref, size_t clock_speed);
 
-    void CpuStep(std::atomic<bool>& stop_signal, unsigned int& cycle_count);
-
-    inline Memory* GetMemory() const {return m_memory;}
+    void CpuStep(bool& stop_signal, unsigned int& cycle_count);
 
     inline void SetLogVerbose(bool val) {m_log_verbose = val;}
 
@@ -77,7 +74,7 @@ public:
 
 private:
 
-    void decodeAndExecuteNonCB(uint8_t opcode, std::atomic<bool>& stop_signal, unsigned int& m_cycles_count);
+    void decodeAndExecuteNonCB(uint8_t opcode, bool& stop_signal, unsigned int& m_cycles_count);
     void decodeAndExecuteCB(uint8_t opcode, unsigned int& m_cycles_count);
 
     uint8_t add(uint8_t a, uint8_t b, bool add_carry, bool* half_carry, bool* full_carry);

@@ -10,7 +10,7 @@ Gui::Gui(uint8_t screen_width, uint8_t screen_height, uint8_t* frame_buffer_ref,
     gb_screen_height = screen_height;
 
     SDL_Init(SDL_INIT_VIDEO);
-    SDL_SetHint(SDL_HINT_RENDER_VSYNC, "0");
+    SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
     SDL_CreateWindowAndRenderer(gb_screen_width, gb_screen_height, 0, &m_window, &m_renderer);
     SDL_SetWindowSize(m_window, m_window_width, m_window_height);
     SDL_SetWindowResizable(m_window, SDL_TRUE);
@@ -20,7 +20,7 @@ Gui::Gui(uint8_t screen_width, uint8_t screen_height, uint8_t* frame_buffer_ref,
     m_texture = SDL_CreateTexture(m_renderer, SDL_PixelFormatEnum::SDL_PIXELFORMAT_RGB24, SDL_TextureAccess::SDL_TEXTUREACCESS_STREAMING, gb_screen_width, gb_screen_height);
 }
 
-void Gui::RenderFrame(std::atomic<bool>& stop_signal) {
+void Gui::RenderFrame(bool& stop_signal) {
     
     std::unordered_map<SDL_Keycode, uint8_t> key_map = {
         {SDLK_RIGHT, 0},

@@ -32,6 +32,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES COMPILE_DEFINITIONS "PROJECT_DI
 target_link_libraries(${PROJECT_NAME} SDL3::SDL3)
 
 if (WIN32)
+	target_compile_options(gb_emulator PUBLIC "/Wall")
 endif (WIN32)
 
 if (UNIX)

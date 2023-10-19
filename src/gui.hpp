@@ -1,13 +1,12 @@
 #pragma once
 #include "SDL.h"
-#include <atomic>
 
 class Gui {
 public:
     Gui(uint8_t screen_with, uint8_t screen_height, uint8_t* frame_buffer_ref, bool* button_map);
     ~Gui();
 
-    void RenderFrame(std::atomic<bool>& stop_signal);
+    void RenderFrame(bool& stop_signal);
 
 private:
     unsigned int gb_screen_width = 160;

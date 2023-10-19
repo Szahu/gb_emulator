@@ -33,9 +33,7 @@ int main(int argc, char** argv) {
     // right left up down a b select start
     bool button_map[] = {false, false, false, false, false, false, false, false};
 
-    std::atomic<bool> stop_signal = false;
-
-    const long long frame_duration_micros = static_cast<long>(1000000.0f / 120.0f);
+    bool stop_signal = false;
 
     // const std::string game_rom_path = PROJECT_DIR"/roms/mts-20221022-1430-8d742b9/emulator-only/mbc1/ram_64kb.gb";
     const std::string game_rom_path = PROJECT_DIR"/roms/mario.gb";
@@ -52,12 +50,12 @@ int main(int argc, char** argv) {
 
     Gui gui(160, 144, framebuffer.data(), button_map);
     
-    unsigned int cycle_count = 0;
-    auto start = std::chrono::high_resolution_clock::now();    
-
     bool verbose_logging = argc > 1;
 
     cpu.SetLogVerbose(verbose_logging);
+
+    unsigned int frame_discout_setting = 1;
+    unsigned int frame_discount_coutner = 0;
 
     while (!stop_signal) {
 
@@ -68,24 +66,16 @@ int main(int argc, char** argv) {
         ppu.PpuStep(tmp);
         timer.TimerStep(tmp);
 
-        cycle_count += tmp;
-
-        if (frame_ready) {
-            gui.RenderFrame(stop_signal);
-            frame_ready = false;
-        }
-
-        if (button_map[6]) {
-            verbose_logging = !verbose_logging;
-            cpu.SetLogVerbose(verbose_logging);
-        }
-
-        auto stop = std::chrono::high_resolution_clock::now();
-        const long long duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count();
-        if (cycle_count >= static_cast<unsigned int>(frequency/60)) {
-            SLEEP_MICROS(frame_duration_micros - duration > 0 ? frame_duration_micros - duration : 0);
-            start = std::chrono::high_resolution_clock::now(); 
-            cycle_count = 0;
+        if (frame_ready) { 
+            if (frame_discount_coutner != frame_discout_setting) {
+                frame_discount_coutner++;
+                frame_ready = false;
+            }
+            else {
+                frame_discount_coutner = 0;
+                gui.RenderFrame(stop_signal);
+                frame_ready = false;
+            }
         }
     }
 

@@ -118,7 +118,7 @@ void Cpu::handleInterrupts(unsigned int& cycle_count) {
 
 }
 
-void Cpu::CpuStep(std::atomic<bool>& stop_signal, unsigned int& cycle_count) {
+void Cpu::CpuStep(bool& stop_signal, unsigned int& cycle_count) {
     
     handleInterrupts(cycle_count);
 
@@ -155,7 +155,7 @@ void Cpu::CpuStep(std::atomic<bool>& stop_signal, unsigned int& cycle_count) {
     }
 }
 
-void Cpu::decodeAndExecuteNonCB(uint8_t opcode, std::atomic<bool>& stop_signal, unsigned int& m_cycles_count) {
+void Cpu::decodeAndExecuteNonCB(uint8_t opcode, bool& stop_signal, unsigned int& m_cycles_count) {
 
     switch (opcode) {
 
