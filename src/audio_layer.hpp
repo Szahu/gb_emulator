@@ -19,11 +19,11 @@ private:
     SDL_AudioSpec m_device_spec; 
     SDL_AudioStream* m_audio_stream = nullptr;
 
-    static constexpr unsigned int INPUT_SAMPLE_RATE = 32768;
+    static constexpr unsigned int INPUT_SAMPLE_RATE = 32768 * 2;
 
     static constexpr SDL_AudioSpec INPUT_AUDIO_SPEC = {
-        SDL_AUDIO_S16,
-        2,
+        SDL_AUDIO_F32,
+        4,
         INPUT_SAMPLE_RATE
     };
 
