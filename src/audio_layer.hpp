@@ -23,7 +23,7 @@ private:
 
     static constexpr SDL_AudioSpec INPUT_AUDIO_SPEC = {
         SDL_AUDIO_F32,
-        4,
+        2,
         INPUT_SAMPLE_RATE
     };
 

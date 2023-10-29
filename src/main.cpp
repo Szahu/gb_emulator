@@ -38,7 +38,7 @@ int main(int argc, char** argv) {
     bool stop_signal = false;
 
     // const std::string game_rom_path = PROJECT_DIR"/roms/mts-20221022-1430-8d742b9/emulator-only/mbc1/ram_64kb.gb";
-    const std::string game_rom_path = PROJECT_DIR"/roms/mario.gb";
+    const std::string game_rom_path = PROJECT_DIR"/roms/tetris.gb";
 
     std::vector<uint8_t> rom_buffer;
     load_program_from_file(game_rom_path, rom_buffer);
