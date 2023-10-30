@@ -2,7 +2,24 @@
 #include "common.hpp"
 
 Apu::Apu(Memory* memory_ref, AudioLayer* audio_layer_ref):
- m_memory(memory_ref), m_audio_layer(audio_layer_ref) {}
+ m_memory(memory_ref), m_audio_layer(audio_layer_ref) {
+
+    m_memory->AddToWriteAddressMapper(CHANNEL_1_PERIOD_HIGH_ADDR, [&] (uint8_t byte) {
+        m_channel_1_trigger = bitGet(byte, 7);
+        m_memory->WriteByteDirect(CHANNEL_1_PERIOD_HIGH_ADDR, byte);
+    });
+
+    m_memory->AddToWriteAddressMapper(CHANNEL_2_PERIOD_HIGH_ADDR, [&] (uint8_t byte) {
+        m_channel_2_trigger = bitGet(byte, 7);
+        m_memory->WriteByteDirect(CHANNEL_2_PERIOD_HIGH_ADDR, byte);
+    });
+
+    m_memory->AddToWriteAddressMapper(CHANNEL_3_PERIOD_HIGH_CONTROL_ADDR, [&] (uint8_t byte) {
+        m_channel_3_trigger = bitGet(byte, 7);
+        m_memory->WriteByteDirect(CHANNEL_3_PERIOD_HIGH_CONTROL_ADDR, byte);
+    });
+
+}
 
 void Apu::ApuStep(unsigned int m_cycle_count) {
     static unsigned int cycle_pool = 0;
@@ -21,7 +38,7 @@ void Apu::ApuStep(unsigned int m_cycle_count) {
 
     handleChannel1(m_cycle_count, produce_sample);
     handleChannel2(m_cycle_count, produce_sample);
-    // handleChannel3(m_cycle_count, produce_sample);
+    handleChannel3(m_cycle_count, produce_sample);
 
     if (produce_sample) {
         cycle_pool -= CYCLES_PER_SAMPLE;
@@ -74,9 +91,10 @@ void Apu::handleChannel1(unsigned int m_cycle_count, bool produce_sample) {
     static uint8_t current_env_dir = 0;
     static uint8_t current_env_pace = 0;
 
-    if (bitGet(period_high_and_control_register, 7) && !is_active) {
+    if (m_channel_1_trigger) {
         // trigger the channel
         is_active = true;
+        m_channel_1_trigger = false;
         length_timer = length_and_duty_register & 0b111111;
         wave_duty = (length_and_duty_register >> 6) & 0x3;
 
@@ -130,6 +148,7 @@ void Apu::handleChannel1(unsigned int m_cycle_count, bool produce_sample) {
     envelope_cycle_pool += m_cycle_count;
     if (current_env_pace != 0 && envelope_cycle_pool >= current_env_pace * CYCLES_PER_ENV_ITERATION) {
         envelope_cycle_pool -= current_env_pace * CYCLES_PER_ENV_ITERATION;
+        // TODO FIX THIS
         // if (current_volume != 0 && current_volume != 0xFF) {
         //     current_volume -= 1 - 2 * current_env_dir; 
         // }
@@ -179,9 +198,10 @@ void Apu::handleChannel2(unsigned int m_cycle_count, bool produce_sample) {
     static uint8_t current_env_dir = 0;
     static uint8_t current_env_pace = 0;
 
-    if (bitGet(period_high_and_control_register, 7) && !is_active) {
+    if (m_channel_2_trigger) {
         // trigger the channel
         is_active = true;
+        m_channel_2_trigger = false;
         length_timer = length_and_duty_register & 0b111111;
         wave_duty = (length_and_duty_register >> 6) & 0x3;
 
@@ -216,6 +236,7 @@ void Apu::handleChannel2(unsigned int m_cycle_count, bool produce_sample) {
     envelope_cycle_pool += m_cycle_count;
     if (current_env_pace != 0 && envelope_cycle_pool >= current_env_pace * CYCLES_PER_ENV_ITERATION) {
         envelope_cycle_pool -= current_env_pace * CYCLES_PER_ENV_ITERATION;
+        // TODO FIX THIS AS WELL
         // if (current_volume != 0 && current_volume != 0xFF) {
         //     current_volume -= 1 - 2 * current_env_dir; 
         // }
@@ -242,34 +263,53 @@ void Apu::handleChannel2(unsigned int m_cycle_count, bool produce_sample) {
 }
 
 void Apu::handleChannel3(unsigned int m_cycle_count, bool produce_sample) {
+    static bool is_active = false;
 
     const uint8_t period_low_register = m_memory->ReadByteDirect(CHANNEL_3_PERIOD_LOW_ADDR);
     const uint8_t period_high_control_register = m_memory->ReadByteDirect(CHANNEL_3_PERIOD_HIGH_CONTROL_ADDR);
-    const unsigned int period_value = period_low_register | ((period_high_control_register & 0x3) << 8);
-    const uint8_t volume = (m_memory->ReadByte(CHANNEL_3_OUTPUT_LEVEL_ADDR) >> 5) & 0x3;
+    
+    const unsigned int period_value = period_low_register | ((period_high_control_register & 0x7) << 8);
 
-    static unsigned int period = 0;
+    static unsigned int period = 2048;
     static unsigned int sample_counter = 0;
+    static uint8_t current_volume = 0;
+
+    uint8_t audio_master_control = m_memory->ReadByteDirect(AUDIO_MASTER_CONTROLL_ADDR);
+    bitSet(audio_master_control, 3, is_active);
+    m_memory->WriteByteDirect(AUDIO_MASTER_CONTROLL_ADDR, audio_master_control);
+
+    if (m_channel_3_trigger) {
+        is_active = true;
+        m_channel_3_trigger = false;
+        period = period_value;
+        current_volume = (m_memory->ReadByte(CHANNEL_3_OUTPUT_LEVEL_ADDR) >> 5) & 0x3;
+        sample_counter = 0;
+    }
+
+    is_active = bitGet(m_memory->ReadByteDirect(CHANNEL_3_DAC_ENABLE_ADDR), 7);
+
+    if (!is_active) {
+        return;
+    }
 
     period += 2 * m_cycle_count;
 
     if (period >= 2048) {
-        // period = period_value;
-        period = 1884;
+        period = period_value;
         sample_counter = (sample_counter + 1) % 32;
     }
 
     if (produce_sample) {
-        uint8_t sample = m_memory->ReadByteDirect(CHANNEL_3_WAVE_RAM_ADDR + sample_counter / 2);
+        uint8_t sample = m_memory->ReadByteDirect(CHANNEL_3_WAVE_RAM_ADDR + (sample_counter / 2));
         if (sample_counter & 0b1) {
-            sample = sample >> 4;
+            sample = sample & 0x0F;
         } else {
-            sample = sample & 0b1111;
+            sample = sample >> 4;
         }
-        if (volume == 0) {
+        if (current_volume == 0) {
             sample = 0;
         } else {
-            sample = sample >> (volume - 1);
+            sample = sample >> (current_volume - 1);
         }
         pushSampleToMixer(static_cast<float>(sample), static_cast<float>(sample), 2);
     }

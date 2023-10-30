@@ -27,6 +27,9 @@ private:
     float m_mixer_buffer[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     float m_volume = 0.5f;
 
+    bool m_channel_1_trigger = false;
+    bool m_channel_2_trigger = false;
+    bool m_channel_3_trigger = false;
 
     // Global registers
     static constexpr uint16_t AUDIO_MASTER_CONTROLL_ADDR = 0xFF26; // NR52 
