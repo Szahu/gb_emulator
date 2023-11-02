@@ -49,11 +49,13 @@ void Ppu::renderObjectLine(uint8_t scanline, OAM_t* oam_buffer, uint8_t buffer_s
         OAM_t current_oam = oam_buffer[object_index];
         
         if (double_height_mode) {
+            throw std::runtime_error("Double height rendering is not supported!");
             current_oam.tile_index &= 0xFE; // ignore the least significant bit in double mode
         }
 
         const bool flip_x = bitGet(current_oam.flags, 5);
         const bool flip_y = bitGet(current_oam.flags, 6);
+        const bool priority = bitGet(current_oam.flags, 7);
 
         const uint16_t tile_addr = 0x8000 + 16 * current_oam.tile_index;
         uint8_t y_offset_local = (scanline - (current_oam.y_position & 0x7)) & 0x7;
@@ -73,7 +75,13 @@ void Ppu::renderObjectLine(uint8_t scanline, OAM_t* oam_buffer, uint8_t buffer_s
 
             if (x_offset < 0) continue;
 
-            if (color_index != 0) {
+            const bool skip = (color_index == 0) || 
+                (priority && 
+                m_framebuffer[scanline * SCREEN_WIDTH * 3 + x_offset * 3] != PALETTE[0] &&
+                m_framebuffer[scanline * SCREEN_WIDTH * 3 + x_offset * 3 + 1] != PALETTE[0] &&
+                m_framebuffer[scanline * SCREEN_WIDTH * 3 + x_offset * 3 + 2] != PALETTE[0]);
+
+            if (!skip) {
                 m_framebuffer[scanline * SCREEN_WIDTH * 3 + x_offset * 3] = PALETTE[color_index * 3];
                 m_framebuffer[scanline * SCREEN_WIDTH * 3 + x_offset * 3 + 1] = PALETTE[color_index * 3 + 1];
                 m_framebuffer[scanline * SCREEN_WIDTH * 3 + x_offset * 3 + 2] = PALETTE[color_index * 3 + 2];
