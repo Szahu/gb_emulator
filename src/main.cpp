@@ -6,9 +6,9 @@
 #include "ppu.hpp"
 #include "gui.hpp"
 #include "timer.hpp"
-#include <atomic>
+#include "apu.hpp"
+#include "audio_layer.hpp"
 #include <vector>
-#include <thread>
 #include <numeric>
 
 void load_program_from_file(const std::string &filename, std::vector<uint8_t>& data);
@@ -29,6 +29,8 @@ int main(int argc, char** argv) {
     Cpu cpu(&mem, frequency);
     Ppu ppu(&mem, framebuffer, [&frame_ready] () {frame_ready = true;});
     Timer timer(&mem);
+    AudioLayer audio_layer;
+    Apu apu(&mem, &audio_layer);
 
     // right left up down a b select start
     bool button_map[] = {false, false, false, false, false, false, false, false};
@@ -54,7 +56,7 @@ int main(int argc, char** argv) {
 
     cpu.SetLogVerbose(verbose_logging);
 
-    unsigned int frame_discout_setting = 1;
+    const unsigned int frame_discout_setting = 0;
     unsigned int frame_discount_coutner = 0;
 
     while (!stop_signal) {
@@ -65,6 +67,7 @@ int main(int argc, char** argv) {
         cpu.CpuStep(stop_signal, tmp);
         ppu.PpuStep(tmp);
         timer.TimerStep(tmp);
+        apu.ApuStep(tmp);
 
         if (frame_ready) { 
             if (frame_discount_coutner != frame_discout_setting) {

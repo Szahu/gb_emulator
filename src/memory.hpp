@@ -2,6 +2,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <vector>
+#include <unordered_map>
+#include <functional>
 
 /*
 Memory map:
@@ -37,6 +39,10 @@ public:
 
     void CleanMemory();
 
+    void AddToWriteAddressMapper(uint16_t addr, std::function<void(uint8_t)> callback) {
+        m_writes_address_mapper[addr] = callback;
+    }
+
 private:
     uint8_t* m_memory = nullptr;
     size_t m_memory_size = 0;
@@ -47,4 +53,6 @@ private:
     bool m_ram_enable = false;
     bool m_advanced_banking_mode = false;
     bool m_multicart_rom = false;
+
+    std::unordered_map<uint16_t, std::function<void(uint8_t)>> m_writes_address_mapper;
 };

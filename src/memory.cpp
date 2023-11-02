@@ -78,6 +78,11 @@ void Memory::ReadByte(uint16_t addr, void* dest) const {
 void Memory::WriteByte(uint16_t addr, uint8_t byte) {
     LOG_MEM_VERBOSE(printf("MEM: WriteByte | addr: %02x | byte: %01x\n", addr, byte));
 
+    if (m_writes_address_mapper.count(addr) != 0) {
+        m_writes_address_mapper.at(addr)(byte);
+        return;
+    }
+
     unsigned int consumed_m_cycles = 0;
 
     if (addr >= 0 && addr <= 0x1FFF) {
