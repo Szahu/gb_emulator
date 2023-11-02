@@ -13,6 +13,7 @@ private:
     void handleChannel1(unsigned int m_cycle_count, bool produce_sample);
     void handleChannel2(unsigned int m_cycle_count, bool produce_sample);
     void handleChannel3(unsigned int m_cycle_count, bool produce_sample);
+    void handleChannel4(unsigned int m_cycle_count, bool produce_sample);
     void pushSampleToMixer(float sampleL, float sampleR, unsigned int channel);
 
 private:
@@ -30,6 +31,9 @@ private:
     bool m_channel_1_trigger = false;
     bool m_channel_2_trigger = false;
     bool m_channel_3_trigger = false;
+    bool m_channel_4_trigger = false;
+
+    bool m_channel_4_length_reload = false;
 
     // Global registers
     static constexpr uint16_t AUDIO_MASTER_CONTROLL_ADDR = 0xFF26; // NR52 
@@ -59,6 +63,12 @@ private:
     static constexpr uint16_t CHANNEL_3_PERIOD_HIGH_CONTROL_ADDR = 0xFF1E; // NR34
     static constexpr uint16_t CHANNEL_3_WAVE_RAM_ADDR = 0xFF30; // NR34
     static constexpr uint16_t CHANNEL_3_WAVE_RAM_SIZE = 0x10; // NR34
+
+    // channel 4
+    static constexpr uint16_t CHANNEL_4_LENGTH_TIMER_ADDR = 0xFF20;
+    static constexpr uint16_t CHANNEL_4_VOLUME_AND_ENVELOPE_ADDR = 0xFF21;
+    static constexpr uint16_t CHANNEL_4_FREQUENCY_AND_RANDOMNESS_ADDR = 0xFF22;
+    static constexpr uint16_t CHANNEL_4_CONTROL_ADDR = 0xFF23;
 
     static constexpr uint8_t DUTY_CYCLES[] = {
         1, 1, 1, 1, 1, 1, 1, 0,

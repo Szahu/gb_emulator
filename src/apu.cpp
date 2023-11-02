@@ -19,6 +19,16 @@ Apu::Apu(Memory* memory_ref, AudioLayer* audio_layer_ref):
         m_memory->WriteByteDirect(CHANNEL_3_PERIOD_HIGH_CONTROL_ADDR, byte);
     });
 
+    m_memory->AddToWriteAddressMapper(CHANNEL_4_CONTROL_ADDR, [&] (uint8_t byte) {
+        m_channel_4_trigger = bitGet(byte, 7);
+        m_memory->WriteByteDirect(CHANNEL_4_CONTROL_ADDR, byte);
+    });
+
+    m_memory->AddToWriteAddressMapper(CHANNEL_4_LENGTH_TIMER_ADDR, [&] (uint8_t byte) {
+        m_channel_4_length_reload = true;
+        m_memory->WriteByteDirect(CHANNEL_4_LENGTH_TIMER_ADDR, byte);
+    });
+
 }
 
 void Apu::ApuStep(unsigned int m_cycle_count) {
@@ -36,9 +46,10 @@ void Apu::ApuStep(unsigned int m_cycle_count) {
 
     std::memset(m_mixer_buffer, 0x0, sizeof(m_mixer_buffer));
 
-    handleChannel1(m_cycle_count, produce_sample);
-    handleChannel2(m_cycle_count, produce_sample);
-    handleChannel3(m_cycle_count, produce_sample);
+    // handleChannel1(m_cycle_count, produce_sample);
+    // handleChannel2(m_cycle_count, produce_sample);
+    // handleChannel3(m_cycle_count, produce_sample);
+    handleChannel4(m_cycle_count, produce_sample);
 
     if (produce_sample) {
         cycle_pool -= CYCLES_PER_SAMPLE;
@@ -313,4 +324,89 @@ void Apu::handleChannel3(unsigned int m_cycle_count, bool produce_sample) {
         }
         pushSampleToMixer(static_cast<float>(sample), static_cast<float>(sample), 2);
     }
+}
+
+void Apu::handleChannel4(unsigned int m_cycle_count, bool produce_sample) {
+    const uint8_t initial_length_timer = m_memory->ReadByteDirect(CHANNEL_4_LENGTH_TIMER_ADDR);
+    const uint8_t volume_and_envelope = m_memory->ReadByteDirect(CHANNEL_4_VOLUME_AND_ENVELOPE_ADDR);
+    const uint8_t frequency_and_randomness = m_memory->ReadByteDirect(CHANNEL_4_FREQUENCY_AND_RANDOMNESS_ADDR);
+    const uint8_t control_register = m_memory->ReadByteDirect(CHANNEL_4_CONTROL_ADDR);
+
+    static constexpr uint8_t divisor_table[] = {
+        8, 16, 32, 48, 64, 80, 96, 112
+    };
+    static constexpr unsigned int CYCLES_PER_LENGTH_TIMER_TICK = (1 << 20) / 256;
+
+    static bool is_active = false;
+
+    static unsigned int clock = 0;
+    static uint8_t current_LFSR_width = 0;
+
+    static unsigned int cycles_per_clock_tick = 0;
+    static uint16_t LFSR = 0;
+    static uint8_t current_volume = 0;
+
+    static unsigned int length_counter = 0;
+    static unsigned int length_timer_pool = 0; 
+
+    uint8_t audio_master_control = m_memory->ReadByteDirect(AUDIO_MASTER_CONTROLL_ADDR);
+    bitSet(audio_master_control, 3, is_active);
+    m_memory->WriteByteDirect(AUDIO_MASTER_CONTROLL_ADDR, audio_master_control);
+
+    if (m_channel_4_trigger) {
+        m_channel_4_trigger = false;
+        is_active = true;
+        clock = 0;
+
+        uint8_t divider = frequency_and_randomness & 0x7;
+        uint8_t shift = frequency_and_randomness >> 4;
+        current_LFSR_width = (frequency_and_randomness >> 3) & 0x1; 
+        if (divider == 0) {
+            divider = 1;
+            if (shift != 0) shift--;
+        }
+        unsigned int frequency = (262144 / (divider * (1 << shift)));
+        cycles_per_clock_tick = (1 << 20) / frequency;
+        LFSR = 0xFFFF;
+
+        current_volume = volume_and_envelope >> 4;
+
+        length_timer_pool = 0;
+        length_counter = initial_length_timer;
+    }
+    
+    if (!is_active) {
+        return;
+    }
+
+    if (m_channel_4_length_reload) {
+        m_channel_4_length_reload = false;
+        length_counter = initial_length_timer;
+    }
+
+    length_timer_pool += m_cycle_count;
+    if (length_timer_pool >= CYCLES_PER_LENGTH_TIMER_TICK) {
+        length_timer_pool -= CYCLES_PER_LENGTH_TIMER_TICK;
+        length_counter++;
+        if (length_counter == 64 && bitGet(control_register, 6)) {
+            is_active = false;
+        }
+    }
+
+    clock += m_cycle_count;
+    if (clock >= cycles_per_clock_tick) {
+        clock -= cycles_per_clock_tick;
+        bool xor_res = bitGet(LFSR, 0) ^ bitGet(LFSR, 1);
+        LFSR = LFSR >> 1;
+        bitSet(LFSR, 14, xor_res);
+        if (current_LFSR_width) {
+            bitSet(LFSR, 6, xor_res);
+        }
+    }
+
+    if (produce_sample) {
+        uint8_t sample = (!bitGet(LFSR, 0)) * current_volume;
+        pushSampleToMixer(static_cast<float>(sample), static_cast<float>(sample), 3);
+    }
+
 }
