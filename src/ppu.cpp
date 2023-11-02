@@ -97,8 +97,7 @@ void Ppu::renderBackgroundLine(uint8_t scanline) {
     const uint8_t wx = m_memory->ReadByteDirect(WX_ADDR);
     const uint8_t wy = m_memory->ReadByteDirect(WY_ADDR);
 
-    const uint8_t pixel_coord_y = (scanline + scy) & 0xFF;
-    const uint16_t y_tile = pixel_coord_y / 8;
+    uint8_t pixel_coord_y = (scanline + scy) & 0xFF;
 
     const uint8_t pallete = m_memory->ReadByteDirect(0xFF47);
 
@@ -107,11 +106,18 @@ void Ppu::renderBackgroundLine(uint8_t scanline) {
         const bool inside_window = x_offset + 7 >= wx && scanline >= wy && bitGet(LCDC, 5);
 
         uint16_t tilemap_addr = 0x9800;
-        if (!inside_window && bitGet(LCDC, 3)) tilemap_addr = 0x9C00;
-        if (inside_window && bitGet(LCDC, 6)) tilemap_addr = 0x9C00;
+        if ((!inside_window && bitGet(LCDC, 3)) || (inside_window && bitGet(LCDC, 6))) {
+            tilemap_addr = 0x9C00;
+        } 
 
-        const uint8_t pixel_coord_x = (x_offset + (scx & 0xFF)) & 0xFF;
+        uint8_t pixel_coord_x = (x_offset + (scx & 0xFF)) & 0xFF;
+        if (inside_window) {
+            pixel_coord_x = x_offset + 7 - wx;
+            pixel_coord_y = scanline - wy;
+        }
+
         const uint16_t x_tile = pixel_coord_x / 8;
+        const uint16_t y_tile = pixel_coord_y / 8; 
 
         const uint8_t tile_idnex = m_memory->ReadByteDirect(tilemap_addr + x_tile + (y_tile << 5));
 
