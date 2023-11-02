@@ -46,9 +46,9 @@ void Apu::ApuStep(unsigned int m_cycle_count) {
 
     std::memset(m_mixer_buffer, 0x0, sizeof(m_mixer_buffer));
 
-    // handleChannel1(m_cycle_count, produce_sample);
-    // handleChannel2(m_cycle_count, produce_sample);
-    // handleChannel3(m_cycle_count, produce_sample);
+    handleChannel1(m_cycle_count, produce_sample);
+    handleChannel2(m_cycle_count, produce_sample);
+    handleChannel3(m_cycle_count, produce_sample);
     handleChannel4(m_cycle_count, produce_sample);
 
     if (produce_sample) {
@@ -336,6 +336,7 @@ void Apu::handleChannel4(unsigned int m_cycle_count, bool produce_sample) {
         8, 16, 32, 48, 64, 80, 96, 112
     };
     static constexpr unsigned int CYCLES_PER_LENGTH_TIMER_TICK = (1 << 20) / 256;
+    static constexpr unsigned int CYCLES_PER_ENEVLOPE_TIMER_TICK = (1 << 20) / 64;
 
     static bool is_active = false;
 
@@ -344,7 +345,11 @@ void Apu::handleChannel4(unsigned int m_cycle_count, bool produce_sample) {
 
     static unsigned int cycles_per_clock_tick = 0;
     static uint16_t LFSR = 0;
+
+    static uint8_t envelope_sweep_pace = 0;
+    static unsigned int envelope_cycle_pool = 0;
     static uint8_t current_volume = 0;
+    static uint8_t envelope_dir = 0;
 
     static unsigned int length_counter = 0;
     static unsigned int length_timer_pool = 0; 
@@ -370,11 +375,26 @@ void Apu::handleChannel4(unsigned int m_cycle_count, bool produce_sample) {
         LFSR = 0xFFFF;
 
         current_volume = volume_and_envelope >> 4;
+        envelope_sweep_pace = volume_and_envelope & 0x7;
+        envelope_dir = bitGet(volume_and_envelope, 3);
+        envelope_cycle_pool = 0;
 
         length_timer_pool = 0;
         length_counter = initial_length_timer;
     }
     
+    if (volume_and_envelope >> 3 == 0) {
+        is_active = false;
+    }
+
+    envelope_cycle_pool += m_cycle_count;
+    if (envelope_sweep_pace != 0 && envelope_cycle_pool >= CYCLES_PER_ENEVLOPE_TIMER_TICK * envelope_sweep_pace) {
+        envelope_cycle_pool -= CYCLES_PER_ENEVLOPE_TIMER_TICK * envelope_sweep_pace;
+        if (current_volume != 0) {
+            current_volume -= 1 + (-2 * envelope_dir);
+        }
+    }
+
     if (!is_active) {
         return;
     }

@@ -26,7 +26,7 @@ private:
     Memory* m_memory = nullptr;
     AudioLayer* m_audio_layer = nullptr;
     float m_mixer_buffer[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-    float m_volume = 0.5f;
+    float m_volume = 0.05f;
 
     bool m_channel_1_trigger = false;
     bool m_channel_2_trigger = false;
